@@ -1,0 +1,16 @@
+2021-12-10 08:07:11,713 - nocrop_final_v2.0
+2021-12-10 08:07:12,266 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v1_0/Cycle_9_min_acer_model.pth
+2021-12-10 08:07:19,101 - |TP:1250 |TN:1257 |FP:3 |FN:10 /HTER:0.0052 |APCER:0.002381 |NPCER:0.007937 |ACER:0.005159 |FPR=e2:0.996032 |FPR=e3:0.986508 |FPR=e4:0.982540|
+2021-12-10 08:07:23,820 - auc_value : 0.9993732678256488
+2021-12-10 08:07:24,358 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v1_0/Cycle_19_min_acer_model.pth
+2021-12-10 08:07:35,435 - |TP:1254 |TN:1259 |FP:1 |FN:6 /HTER:0.0028 |APCER:0.000794 |NPCER:0.004762 |ACER:0.002778 |FPR=e2:0.996825 |FPR=e3:0.995238 |FPR=e4:0.995238|
+2021-12-10 08:07:40,127 - auc_value : 0.9999502393550013
+2021-12-10 08:07:40,649 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v1_0/Cycle_29_min_acer_model.pth
+2021-12-10 08:07:50,725 - |TP:1254 |TN:1260 |FP:0 |FN:6 /HTER:0.0024 |APCER:0.000000 |NPCER:0.004762 |ACER:0.002381 |FPR=e2:0.999206 |FPR=e3:0.996032 |FPR=e4:0.995238|
+2021-12-10 08:07:55,285 - auc_value : 0.9999678760393047
+2021-12-10 08:07:55,803 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v1_0/Cycle_39_min_acer_model.pth
+2021-12-10 08:08:02,880 - |TP:1255 |TN:1257 |FP:3 |FN:5 /HTER:0.0032 |APCER:0.002381 |NPCER:0.003968 |ACER:0.003175 |FPR=e2:0.997619 |FPR=e3:0.996032 |FPR=e4:0.996032|
+2021-12-10 08:08:07,607 - auc_value : 0.9999653565129756
+2021-12-10 08:08:08,128 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v1_0/Cycle_49_min_acer_model.pth
+2021-12-10 08:08:11,218 - |TP:1254 |TN:1260 |FP:0 |FN:6 /HTER:0.0024 |APCER:0.000000 |NPCER:0.004762 |ACER:0.002381 |FPR=e2:1.000000 |FPR=e3:0.996825 |FPR=e4:0.996825|
+2021-12-10 08:08:15,773 - auc_value : 0.9999874023683547

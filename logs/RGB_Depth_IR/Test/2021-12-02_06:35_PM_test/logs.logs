@@ -1,0 +1,9 @@
+2021-12-02 18:35:37,339 - test
+2021-12-02 18:35:42,139 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v1_0/global_min_acer_model.pth
+2021-12-02 18:36:04,082 - |TP:1259 |TN:431 |FP:829 |FN:1 /HTER:0.3294 |APCER:0.657936 |NPCER:0.000794 |ACER:0.329365 |FPR=e2:0.223016 |FPR=e3:0.110317 |FPR=e4:0.080952|
+2021-12-02 18:36:10,799 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v1_0/Cycle_1_min_acer_model.pth
+2021-12-02 18:36:30,097 - |TP:224 |TN:1215 |FP:45 |FN:1036 /HTER:0.4290 |APCER:0.035714 |NPCER:0.822222 |ACER:0.428968 |FPR=e2:0.084127 |FPR=e3:0.025603 |FPR=e4:0.021429|
+2021-12-02 18:36:36,681 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v1_0/Cycle_25_min_acer_model.pth
+2021-12-02 18:36:55,386 - |TP:1260 |TN:426 |FP:834 |FN:0 /HTER:0.3310 |APCER:0.661904 |NPCER:0.000000 |ACER:0.330952 |FPR=e2:0.252381 |FPR=e3:0.100000 |FPR=e4:0.073016|
+2021-12-02 18:37:01,616 - weight dir: /mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v1_0/Cycle_49_min_acer_model.pth
+2021-12-02 18:37:21,236 - |TP:1259 |TN:410 |FP:850 |FN:1 /HTER:0.3377 |APCER:0.674603 |NPCER:0.000794 |ACER:0.337698 |FPR=e2:0.276667 |FPR=e3:0.109524 |FPR=e4:0.100794|
