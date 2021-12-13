@@ -80,7 +80,7 @@ eval_score = []
 test_score = []
 
 def train(epochs):
-    out_dir = './models/output/RGB'
+    out_dir = '../checkpoint/RGB'
 
     if args.mode == 1:
         if not os.path.exists(out_dir +'/checkpoint_v1_'+str(args.tryout)):

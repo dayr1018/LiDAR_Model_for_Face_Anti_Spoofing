@@ -79,7 +79,7 @@ eval_score = []
 test_score = []
 
 def train(epochs):
-    out_dir = './models/output/RGB_Depth'
+    out_dir = '../checkpoint/RGB_Depth'
 
     if args.mode == 1:
         if not os.path.exists(out_dir +'/checkpoint_v1_'+str(args.tryout)):

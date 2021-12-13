@@ -97,27 +97,8 @@ def val(epoch=0, data_set=test_data,flag=1, weight_dir=''):
     logger.Print(f"auc_value : {auc_value}")
 
 if __name__ == '__main__':
-    # global_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v'+ str(args.mode) +'_0/global_min_acer_model.pth'
-    # print("--global_dir start--")
-    # val(epoch="_global_min", weight_dir=global_dir)
-    # print("--global_dir end--")
-
-    # local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_1_min_acer_model.pth'
-    # print("--local_dir_1 start--")
-    # val(epoch=0, weight_dir=local_dir)
-    # print("--local_dir_1 end--")
-
-    # local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_25_min_acer_model.pth'
-    # print("--local_dir_25 start--")
-    # val(epoch=24, weight_dir=local_dir)
-    # print("--local_dir_25 end--")
-
-    # local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_49_min_acer_model.pth'
-    # print("--local_dir_50 start--")
-    # val(epoch=49, weight_dir=local_dir)
-    # print("--local_dir_50 end--")
 
     for i in range(50):
         if (i+1) % 10 == 0:
-            local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_' + str(i) + '_min_acer_model.pth'
+            local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/checkpoint/RGB/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_' + str(i) + '_min_acer_model.pth'
             val(epoch=i, weight_dir=local_dir)

@@ -140,22 +140,22 @@ def val(epoch=0, data_set=test_data,flag=1, weight_dir=''):
         f.close()
 
 if __name__ == '__main__':
-    global_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v'+ str(args.mode) +'_0/global_min_acer_model.pth'
+    global_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/checkpoint/RGB_Depth_IR/checkpoint_v'+ str(args.mode) +'_0/global_min_acer_model.pth'
     print("--global_dir start--")
     val(epoch=49, weight_dir=global_dir)
     print("--global_dir end--")
 
-    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_1_min_acer_model.pth'
+    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/checkpoint/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_1_min_acer_model.pth'
     print("--local_dir_1 start--")
     val(epoch=1, weight_dir=local_dir)
     print("--local_dir_1 end--")
 
-    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_25_min_acer_model.pth'
+    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/checkpoint/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_25_min_acer_model.pth'
     print("--local_dir_25 start--")
     val(epoch=25, weight_dir=local_dir)
     print("--local_dir_25 end--")
 
-    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/models/output/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_49_min_acer_model.pth'
+    local_dir = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/checkpoint/RGB_Depth_IR/checkpoint_v' + str(args.mode) + '_0/' +'Cycle_49_min_acer_model.pth'
     print("--local_dir_49 start--")
     val(epoch=49, weight_dir=local_dir)
     print("--local_dir_49 end--")
