@@ -1,32 +1,7 @@
-import pdb  
-import sys
-import time
 import argparse
-import os
 import logging
 from scipy import interp
-import numpy as np
 from sklearn import metrics
-import matplotlib.pyplot as plt
-# import matplotlib
-# matplotlib.use('Agg')
-class Logger():
-    def __init__(self,logPath):
-        logger = logging.getLogger(__name__)
-        logger.setLevel(level = logging.INFO)
-        handler = logging.FileHandler(logPath)
-        handler.setLevel(logging.INFO)
-        # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        formatter = logging.Formatter('%(asctime)s - %(message)s')
-        handler.setFormatter(formatter)
-        console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
-        logger.addHandler(handler)
-        logger.addHandler(console)
-        self.logger = logger
-
-    def Print(self,message):
-        self.logger.info(message)
 
 def add_args():
     parser = argparse.ArgumentParser(description='face anto-spoofing')
@@ -52,34 +27,10 @@ def eval_model(y_true, y_pred, y_prob, logger=None):
     score_2 = interp(0.001,fpr,tpr)
     score_3 = interp(0.0001,fpr,tpr)
 
-    message = f'|TP:{tp} |TN:{tn} |FP:{fp} |FN:{fn} /HTER:{HTER:.4F} |APCER:{APCER:.6F} |NPCER:{NPCER:.6F} '\
-                f'|ACER:{ACER:.6F} |FPR=e2:{score_1:.6f} |FPR=e3:{score_2:.6f} |FPR=e4:{score_3:.6f}|'
+    # line1 = f'TP:{tp}, TN:{tn}, FP:{fp}, FN:{fn}\n'
+    # line2 = f'APCER:{APCER:.6F}, NPCER:{NPCER:.6F}, ACER:{ACER:.6F}\n' 
+    # line3 = f'FPR=e2:{score_1:.6f}, FPR=e3:{score_2:.6f}, FPR=e4:{score_3:.6f}'
+    # message = line1 + line2 + line3
+    message = f'TP:{tp}, TN:{tn}, FP:{fp}, FN:{fn}, ACER:{ACER:.6F}'
 
     return message, score_3, ACER
-
-if __name__ == '__main__':
-    args = add_args()
-    logger = Logger('./eval.logs')
-    y_prob_list = []
-    y_pLabel_list = []
-    y_label_list = []
-    lines_in_yProb = open(args.file_path,'r')
-    lines_in_yLabel = open(args.label_path,'r')
-
-    for line in lines_in_yProb:
-        line = line.rstrip()
-        split_str = line.split()
-        y_prob = float(split_str[3])
-        y_prob_list.append(y_prob)
-        if y_prob > 0.5:
-            y_pLabel_list.append(1)
-        else:
-            y_pLabel_list.append(0)
-    
-    for line in lines_in_yLabel:
-        line = line.rstrip()
-        split_str = line.split()
-        y_label = float(split_str[3])
-        y_label_list.append(y_label)
-    
-    eval_model(y_label_list, y_pLabel_list, y_prob_list, logger)

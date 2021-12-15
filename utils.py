@@ -39,25 +39,24 @@ def plot_figure(path, train_loss, eval_loss):
     plt.savefig(path+f'/loss.png')
     plt.close(fig)
 
-def plot_roc_curve(path, epoch, y_true, y_prob):
+def plot_roc_curve(path, title_info, y_true, y_prob):
     fpr, tpr, thresholds = roc_curve(y_true, y_prob)
     auc_value = auc(fpr, tpr)
-    print("auc_value: " + str(auc_value))
 
     fig = plt.figure()
     plt.title("ROC Curve")
     plt.xlabel("False Positive Rate (FPR)")
     plt.ylabel("True Positive Rate (TPR)")    
-    plt.plot(fpr, tpr, color='red', label=f'epoch ' + str(epoch))
+    plt.plot(fpr, tpr, color='red', label=title_info)
     plt.plot([0,1], [0,1], color='green', linestyle='--') 
     plt.legend(loc='upper left')
-    plt.text(0.55, 0.1, f"Area Under the Curve: {auc_value:4f}")
-    plt.savefig(path+f'/roc_curve_epoch' + str(epoch) + f'.png')
+    plt.text(0.55, 0.1, f"Area Under the Curve:{ auc_value:4f}")
+    plt.savefig(path+f'/roc_curve_epoch {title_info}.png')
     plt.close(fig)
 
     return auc_value
     
-def plot_eval_metric(path, epoch, y_true, y_prob):
+def plot_eval_metric(path, title_info, y_true, y_prob):
     APCER_list = []
     NPCER_list = []
     ACER_list = []
@@ -76,14 +75,14 @@ def plot_eval_metric(path, epoch, y_true, y_prob):
     Index_nparray = np.array(Index_list)
 
     fig = plt.figure()
-    plt.title(f"Evaluation Metrics - epoch " + str(epoch))
+    plt.title(f"Evaluation Metrics - {title_info}")
     plt.xlabel("Number of data")
     plt.ylabel("Performance(%)")
     plt.plot(Index_nparray, ACPER_nparray, color="red", label="APCER")
     plt.plot(Index_nparray, NPCER_nparray, color="blue", label="NPCER")
     plt.plot(Index_nparray, ACER_nparray, color="green", label="ACER")
     plt.legend(loc='upper left')
-    plt.savefig(path+f'/eval_metrics_epoch' + str(epoch) + f'.png')
+    plt.savefig(path+f'/eval_metrics_{title_info}.png')
     plt.close(fig)
 
 def cal_metrics(y_true, y_prob, length):

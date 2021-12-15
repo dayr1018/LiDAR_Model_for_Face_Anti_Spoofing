@@ -6,7 +6,7 @@ class Logger():
         logger.setLevel(level = logging.INFO)
         handler = logging.FileHandler(logPath)
         handler.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(message)s')
+        formatter = logging.Formatter('%(message)s')
         handler.setFormatter(formatter)
         console = logging.StreamHandler()
         console.setLevel(logging.INFO)

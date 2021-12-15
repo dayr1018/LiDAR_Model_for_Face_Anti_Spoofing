@@ -13,7 +13,7 @@ class CISIA_SURF(Dataset):
     def __init__(self, metadata_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/code/metadata/', 
                         data_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/data/' , datatxt = '', transform=None):
         self.metadata_root = metadata_root
-        self.data_root =  data_root
+        self.data_root = data_root
         self.transform = transform
         self.rgb_paths = []
         self.labels = []
@@ -42,7 +42,6 @@ class CISIA_SURF(Dataset):
 
     def __len__(self):
         return len(self.rgb_paths)
-
 
 def load_cisia_surf(train_size=128, test_size=64, mode=1): 
     
