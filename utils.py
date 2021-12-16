@@ -51,7 +51,7 @@ def plot_roc_curve(path, title_info, y_true, y_prob):
     plt.plot([0,1], [0,1], color='green', linestyle='--') 
     plt.legend(loc='upper left')
     plt.text(0.55, 0.1, f"Area Under the Curve:{ auc_value:4f}")
-    plt.savefig(path+f'/roc_curve_epoch {title_info}.png')
+    plt.savefig(path+f'/{title_info}_roc_curve.png')
     plt.close(fig)
 
     return auc_value

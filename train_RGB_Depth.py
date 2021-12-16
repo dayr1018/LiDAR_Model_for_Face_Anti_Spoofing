@@ -79,7 +79,7 @@ train_score = []
 eval_score = []
 test_score = []
 
-def train(epoch, fold, data_loader):
+def train(fold, epoch, data_loader):
 
     train_history = []
     auc_history = []
@@ -175,7 +175,7 @@ def train(epoch, fold, data_loader):
 
         if not os.path.exists(f'{save_path}/train'):
             os.makedirs(f'{save_path}/train')
-        title_info = f'epoch{epoch}(fold={fold})'
+        title_info = f'fold-{fold}_epoch-{epoch}'
         auc_value = plot_roc_curve(f'{save_path}/train', title_info, y_true, y_prob)
         auc_history.append(auc_value)
         plot_eval_metric(f'{save_path}/train', title_info, y_true, y_pred)
@@ -190,7 +190,7 @@ def train(epoch, fold, data_loader):
     
     logger.Print("\n")
 
-def test(epoch, data_loader, fold, weight_dir):
+def test(fold, epoch, data_loader, weight_dir):
 
     model = Model(pretrained=False, num_classes=2)
 
@@ -235,7 +235,7 @@ def test(epoch, data_loader, fold, weight_dir):
 
     if not os.path.exists(f'{save_path}/test'):
         os.makedirs(f'{save_path}/test')
-    title_info = f'epoch-{epoch}(fold={fold})'
+    title_info = f'fold-{fold}_epoch-{epoch}'
     auc_value = plot_roc_curve(f'{save_path}/test', title_info, y_true, y_prob)
     plot_eval_metric(f'{save_path}/test', title_info, y_true, y_pred)
 
