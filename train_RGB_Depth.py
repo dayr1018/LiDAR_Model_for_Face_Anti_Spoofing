@@ -69,9 +69,9 @@ scheduler4ct = lr_scheduler.ExponentialLR(optimzer4ct, gamma=0.95)
 
 if use_cuda:
     model = torch.nn.DataParallel(model,device_ids=list(range(torch.cuda.device_count()))) #  device_ids=[0, 1, 2]
-    model = model.to(device)
-    criterion = criterion.to(device)
-    ct_loss = ct_loss.to(device)
+    model = model.cuda()
+    criterion = criterion.cuda()
+    ct_loss = ct_loss.cuda()
 
 train_loss = []
 eval_loss = []
@@ -101,11 +101,11 @@ def train(fold, epoch, data_loader):
     logger.Print(f"***** Batch_size: {args.batch_size}, Test_size: {args.test_size}")
     logger.Print(f"***** <<< when fold:{fold}, start >>>")  
 
+    model.train()  
+
     for epoch in range(epoch):
 
         logger.Print(f"***** << Training epoch:{epoch} >>")   
-
-        model.train()      
 
         y_true = []
         y_pred = []
@@ -120,9 +120,9 @@ def train(fold, epoch, data_loader):
             labels = data[2]
 
             if use_cuda:
-                rgb_img = rgb_img.to(device)
-                depth_img = depth_img.to(device)
-                labels = labels.to(device)
+                rgb_img = rgb_img.cuda()
+                depth_img = depth_img.cuda()
+                labels = labels.cuda()
 
             # 예측 오류 계산 
             outputs, features = model(rgb_img, depth_img)
