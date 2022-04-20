@@ -22,25 +22,8 @@ def image_crop_f(image):
             image_crops.append(img_crop)
     return image_crops
 
-def plot_figure(path, train_loss, eval_loss):
-
-    train_x = np.array([i for i in range(len(train_loss))])
-    train_y = np.array(train_loss)
-    eval_x = np.array([i for i in range(len(eval_loss))])
-    eval_y = np.array(eval_loss)
-
-    fig = plt.figure()
-    plt.title("Loss Graph")
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.plot(train_x, train_y, lw=1, label='train')
-    plt.plot(eval_x, eval_y, lw=1, label='evaluation')    
-    plt.legend(loc='upper left')
-    plt.savefig(path+f'/loss.png')
-    plt.close(fig)
-
 def plot_roc_curve(path, title_info, y_true, y_prob):
-    fpr, tpr, thresholds = roc_curve(y_true, y_prob)
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
     auc_value = auc(fpr, tpr)
 
     fig = plt.figure()
@@ -85,7 +68,22 @@ def plot_eval_metric(path, title_info, y_true, y_prob):
     plt.savefig(path+f'/eval_metrics_{title_info}.png')
     plt.close(fig)
 
-def cal_metrics(y_true, y_prob, length):
+def cal_metrics(y_true, y_pred):
+    
+    if len(y_true) != len(y_pred):
+        print("Evalution length Error - y_true, y_pred")
+        return 0,0,0,0
+    
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+
+    accuracy = (tp + tn) / (tp + fn + fp + tn + 1e-12)
+    precision = tp / (tp + fp + 1e-12)  
+    recall = tp / (tp + fn + 1e-12)
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-12)
+
+    return accuracy, precision, recall, f1
+
+def cal_metrics2(y_true, y_prob):
     
     if len(y_true) != len(y_prob):
         print("Evalution Metircs Calculate Error - APCER, NPCER, ACER")
@@ -93,9 +91,8 @@ def cal_metrics(y_true, y_prob, length):
     
     tn, fp, fn, tp = confusion_matrix(y_true, y_prob).ravel()
     
-    APCER = float(fp)/(tn+fp+0.001)
-    NPCER = float(fn)/(fn+tp+0.001)
-    ACER = (APCER+NPCER)/2
+    apcer = fp / (tn + fp + 1e-12)
+    npcer = fn / (fn + tp + 1e-12) 
+    acer = (apcer + npcer)/2
     
-    return APCER, NPCER, ACER
-
+    return apcer, npcer, acer

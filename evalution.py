@@ -18,7 +18,7 @@ def eval_model(y_true, y_pred, y_prob, logger=None):
     ACER = (APCER+NPCER)/2
 #    FPR = float(fp)/(fp+tn) # 진짜라고 예측했는데, 틀렸어 -> 가짜가 들어왔는데 진짜라고 한 확률 
 #    TPR = float(tp)/(tp+fn) # 진짜라고 예측했는데, 맞췄어 -> 진짜가 들어왔는데 진짜라고 할 확률
-    a = tp/(tp+fn+0.001) + tn/(tn+fp+0.001)
+    a = tp/(tp+fn+0.000001) + tn/(tn+fp+0.000001)
     HTER = 1 - a*0.5
 
     fpr, tpr, thresholds = metrics.roc_curve(y_true, y_prob)
