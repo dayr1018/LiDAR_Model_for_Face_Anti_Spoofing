@@ -17,10 +17,10 @@ class CenterLoss(nn.Module):
         self.feat_dim = feat_dim
         self.use_gpu = use_gpu
         self.criterion_mse = nn.MSELoss() 
-        self.devbice = device
+        self.device = device
 
         if self.use_gpu:
-            self.centers = nn.Parameter(torch.randn(self.num_classes, self.feat_dim).to(self.devbice))
+            self.centers = nn.Parameter(torch.randn(self.num_classes, self.feat_dim).to(self.device))
         else:
             self.centers = nn.Parameter(torch.randn(self.num_classes, self.feat_dim))
 
@@ -36,7 +36,7 @@ class CenterLoss(nn.Module):
         distmat.addmm_(1, -2, x, self.centers.t())
 
         classes = torch.arange(self.num_classes).long()
-        if self.use_gpu: classes = classes.to(self.devbice)
+        if self.use_gpu: classes = classes.to(self.device)
         labels = labels.unsqueeze(1).expand(batch_size, self.num_classes)
         mask = labels.eq(classes.expand(batch_size, self.num_classes))
         dist = distmat * mask.float()

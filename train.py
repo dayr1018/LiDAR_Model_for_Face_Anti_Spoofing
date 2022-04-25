@@ -38,6 +38,10 @@ def booltype(str):
 
 def train(args, train_loader, valid_loader):
 
+    # Tensorboard 
+    global writer
+    writer = SummaryWriter(f"runs/{args.message}")
+
     # args 출력
     logger.Print(args)
 
@@ -100,8 +104,7 @@ def train(args, train_loader, valid_loader):
 
             loss_ce = ce_loss(outputs, labels)
             loss_ct = ct_loss(features, labels)
-            lamda = 0.001
-            loss = loss_ce + lamda * loss_ct
+            loss = loss_ce + args.lamda * loss_ct
 
             writer.add_scalar("Loss/Epoch(Total)", loss, epoch)
             writer.add_scalar("Loss/Epoch(CrossEntropy)", loss_ce, epoch)
@@ -235,8 +238,7 @@ def valid(args, valid_loader, model, epoch):
 
             vloss_ce = ce_loss(outputs, labels)
             vloss_ct = ct_loss(features, labels)
-            lamda = 0.001
-            vloss = vloss_ce + lamda * vloss_ct
+            vloss = vloss_ce + args.lamda * vloss_ct
 
             writer.add_scalar("Total Loss/Epoch (Valid)", vloss, epoch)
             writer.add_scalar("CrossEntropy Loss/Epoch (Valid)", vloss_ce, epoch)
@@ -335,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument('--gr', default=0.0, type=float, help='gaussian rate(default: 0.01)')
     parser.add_argument('--dr', default=0.5, type=float, help='dropout rate(default: 0.1)')
     parser.add_argument('--batchnorm', default=False, type=booltype, help='batch normalization(default: False)')
+    parser.add_argument('--lamda', default=0, type=float, help='rate of center loss (default: 0)')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate(default: 0.001)')
     parser.add_argument('--skf', default=0, type=int, help='stratified k-fold')
     parser.add_argument('--seed', default=1, type=int, help='Seed for random number generator')
@@ -394,17 +397,14 @@ if __name__ == "__main__":
     global logger 
     logger = Logger(f'{args.save_path}/logs.logs')
 
-    # Tensorboard 
-    global writer
-    writer = SummaryWriter(f"runs/{args.message}")
-
     # Autoencoder's path
-    args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0420_bc_test/epoch_9_model.pth"
+    args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_Both_3_dr01_gr0/epoch_90_model.pth"
 
    # Pretrained 된 AutoEncoder 생성 (layer 4)
     global autoencoder
-    autoencoder = AutoEncoder_Intergrated_Basic(4, False, 0).to(args.device)
+    autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
     autoencoder.load_state_dict(torch.load(args.ae_path))
+    autoencoder.eval()
 
     # data loader
     train_loader, valid_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset)
