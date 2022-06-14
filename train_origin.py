@@ -36,7 +36,7 @@ def booltype(str):
     else:
         raise argparse.ArgumentError("Boolean value expected")
 
-def train(args, train_loader, test_loader):
+def train(args, train_loader, valid_loader):
 
     # Tensorboard 
     global writer
@@ -90,13 +90,12 @@ def train(args, train_loader, test_loader):
             inputdata = rgb_image     
             if args.model == "rgb":
                 inputdata = rgb_image
-            elif args.model == "rgb-ae":
-                inputdata = autoencoder(rgb_image)
-            elif args.model == "rgbdepth":
+            elif args.model == "depth":
                 inputdata = torch.cat((rgb_image, depth_image), dim=1)
-            elif args.model == "rgbdepth-ae":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model == "ae":
+                origin_sum = torch.cat((rgb_image, depth_image), dim=1)
+                recons_image = autoencoder(rgb_image, depth_image)
+                inputdata = torch.cat((origin_sum, recons_image), dim=1)
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -105,10 +104,8 @@ def train(args, train_loader, test_loader):
 
             loss_ce = ce_loss(outputs, labels)
             loss_ct = ct_loss(features, labels)
-            
-            loss = loss_ce
-            # loss = loss_ce + args.lamda * loss_ct
-            
+            loss = loss_ce + args.lamda * loss_ct
+
             writer.add_scalar("Loss/Epoch(Total)", loss, epoch)
             writer.add_scalar("Loss/Epoch(CrossEntropy)", loss_ce, epoch)
             writer.add_scalar("Loss/Epoch(Center)", loss_ct, epoch)
@@ -132,7 +129,7 @@ def train(args, train_loader, test_loader):
         scheduler2.step()
 
         if (epoch%5) == 0 or epoch == (args.epochs-1):
-            accuracy, precision, recall, f1, apcer, npcer, acer = test(args, test_loader, model, epoch)
+            accuracy, precision, recall, f1, apcer, npcer, acer = valid(args, valid_loader, model, epoch)
             logger.Print(f"***** Current Epoch:{epoch}, accuracy:{accuracy:3f}, f1:{f1:3f}, apcer:{apcer:3f}, npcer:{npcer:3f}, acer:{acer:3f}")  
             accuracy_list.append(accuracy)
             precision_list.append(precision)
@@ -143,11 +140,11 @@ def train(args, train_loader, test_loader):
             acer_list.append(acer)
             epoch_list.append(epoch)
 
-            writer.add_scalar("Accuracy/Epoch (Test)", accuracy, epoch)
-            writer.add_scalar("F1/Epoch (Test)", f1, epoch)
-            writer.add_scalar("Other Evaluation - APCER/Epoch (Test)", apcer, epoch)
-            writer.add_scalar("Other Evaluation - NPCER/Epoch (Test)", npcer, epoch)
-            writer.add_scalar("Other Evaluation - ACER/Epoch (Test)", acer, epoch)
+            writer.add_scalar("Accuracy/Epoch (Valid)", accuracy, epoch)
+            writer.add_scalar("F1/Epoch (Valid)", f1, epoch)
+            writer.add_scalar("Other Evaluation - APCER/Epoch (Valid)", apcer, epoch)
+            writer.add_scalar("Other Evaluation - NPCER/Epoch (Valid)", npcer, epoch)
+            writer.add_scalar("Other Evaluation - ACER/Epoch (Valid)", acer, epoch)
 
             # 0, 5, 10, ... 순서대로 weight들 저장   
             checkpoint = f'{args.checkpoint_path}/epoch_{epoch}_model.pth'
@@ -155,7 +152,7 @@ def train(args, train_loader, test_loader):
 
             # 결과 나타내기 (ROC 커브)
             auc_value = plot_roc_curve(args.save_path, f"epoch{epoch}_", y_true, y_prob)
-            writer.add_scalar("Other Evaluation - AUC_Value/Epoch (Test)", auc_value, epoch)
+            writer.add_scalar("Other Evaluation - AUC_Value/Epoch (Valid)", auc_value, epoch)
 
             auc_list.append(auc_value)
 
@@ -183,7 +180,7 @@ def train(args, train_loader, test_loader):
     logger.Print(f"***** Total Epoch")
     logger.Print(epoch_list)
 
-    logger.Print(f"\n***** Result (Test)")
+    logger.Print(f"\n***** Result (Valid)")
     logger.Print(f"Accuracy: {max_accuracy:3f}")
     logger.Print(f"Precision: {ma_precision:3f}")
     logger.Print(f"Recall: {ma_recall:3f}")
@@ -196,7 +193,9 @@ def train(args, train_loader, test_loader):
 
     writer.close()   
 
-def test(args, test_loader, model, epoch):
+    return ma_epoch
+
+def valid(args, valid_loader, model, epoch):
 
     model.eval()
 
@@ -205,15 +204,16 @@ def test(args, test_loader, model, epoch):
     y_prob = []
 
     ce_loss = nn.CrossEntropyLoss()
+    ct_loss = CenterLoss(num_classes=2, feat_dim=512, use_gpu=True, device=args.device)
 
     with torch.no_grad():
-        for _, data in enumerate(test_loader):
+        for _, data in enumerate(valid_loader):
             rgb_image, depth_image, labels = data
 
             # 가우시안 노이즈 추가 
             if args.gr != 0 :
                 rgb_image =torch.FloatTensor(random_noise(rgb_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-                # depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
+                depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
 
             # 텐서화
             rgb_image = rgb_image.to(args.device) 
@@ -224,13 +224,12 @@ def test(args, test_loader, model, epoch):
             inputdata = rgb_image     
             if args.model == "rgb":
                 inputdata = rgb_image
-            elif args.model == "rgb-ae":
-                inputdata = autoencoder(rgb_image)
-            elif args.model == "rgbdepth":
+            elif args.model == "depth":
                 inputdata = torch.cat((rgb_image, depth_image), dim=1)
-            elif args.model == "rgbdepth-ae":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model == "ae":
+                origin_sum = torch.cat((rgb_image, depth_image), dim=1)
+                recons_image = autoencoder(rgb_image, depth_image)
+                inputdata = torch.cat((origin_sum, recons_image), dim=1)
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -238,7 +237,12 @@ def test(args, test_loader, model, epoch):
             prob_outputs = f.softmax(outputs,1)[:,1]
 
             vloss_ce = ce_loss(outputs, labels)
-            writer.add_scalar("CrossEntropy Loss/Epoch (Test)", vloss_ce, epoch)
+            vloss_ct = ct_loss(features, labels)
+            vloss = vloss_ce + args.lamda * vloss_ct
+
+            writer.add_scalar("Total Loss/Epoch (Valid)", vloss, epoch)
+            writer.add_scalar("CrossEntropy Loss/Epoch (Valid)", vloss_ce, epoch)
+            writer.add_scalar("Center Loss/Epoch (Valid)", vloss_ct, epoch)
         
             y_pred.extend(pred_outputs.data.cpu().numpy())
             y_prob.extend(prob_outputs.data.cpu().numpy())
@@ -250,7 +254,7 @@ def test(args, test_loader, model, epoch):
 
     return accuracy, precision, recall, f1, apcer, npcer, acer
 
-def test_v2(args, test_loader, weight_path):
+def test(args, test_loader, weight_path):
     model = Face_Detection_Model(args.inputdata_channel).to(args.device)
     model.load_state_dict(torch.load(weight_path))
     model.eval()
@@ -273,7 +277,7 @@ def test_v2(args, test_loader, weight_path):
             # 가우시안 노이즈 추가 
             if args.gr != 0 :
                 rgb_image =torch.FloatTensor(random_noise(rgb_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-                # depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
+                depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
 
             # 텐서화
             rgb_image = rgb_image.to(args.device) 
@@ -284,11 +288,12 @@ def test_v2(args, test_loader, weight_path):
             inputdata = rgb_image     
             if args.model == "rgb":
                 inputdata = rgb_image
-            elif args.model == "ae":
-                inputdata = autoencoder(rgb_image)
             elif args.model == "depth":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
+                inputdata = torch.cat((rgb_image, depth_image), dim=1)
+            elif args.model == "ae":
+                origin_sum = torch.cat((rgb_image, depth_image), dim=1)
+                recons_image = autoencoder(rgb_image, depth_image)
+                inputdata = torch.cat((origin_sum, recons_image), dim=1)
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -313,7 +318,6 @@ def test_v2(args, test_loader, weight_path):
     logger.Print(f"ACER: {acer:3f}")
     logger.Print(f"AUC Value: {auc_value:3f}")
 
-    return accuracy, precision, recall, f1, apcer, npcer, acer
 
 if __name__ == "__main__":
 
@@ -328,8 +332,7 @@ if __name__ == "__main__":
     parser.add_argument('--message', default='', type=str, help='pretrained model checkpoint')                     
     parser.add_argument('--epochs', default=300, type=int, help='train epochs')                                    
     parser.add_argument('--lowdata', default=True, type=booltype, help='whether low data is included')
-    parser.add_argument('--hist-stretch', default=False, type=booltype, help='histogram stretching')
-    parser.add_argument('--dataset', default=1, type=int, help='data set type(defaulct: 1, which means including etc)')
+    parser.add_argument('--dataset', default=0, type=int, help='data set type')
     parser.add_argument('--loss', default=0, type=int, help='0: mse, 1:rapp')
     parser.add_argument('--gr', default=0.0, type=float, help='gaussian rate(default: 0.01)')
     parser.add_argument('--dr', default=0.5, type=float, help='dropout rate(default: 0.1)')
@@ -346,12 +349,10 @@ if __name__ == "__main__":
     # 중요 옵션 체크 및 model type 배정 
     if args.model == "rgb":
         args.inputdata_channel = 3
-    elif args.model == "rgb-ae":
-        args.inputdata_channel = 3
-    elif args.model == "rgbdepth":
+    elif args.model == "depth":
         args.inputdata_channel = 4
-    elif args.model == "rgbdepth-ae":
-        args.inputdata_channel = 4
+    elif args.model == "ae":
+        args.inputdata_channel = 8
     else:
         print("You need to checkout option 'model' [rgb, depth, ae]")
         sys.exit(0)
@@ -397,24 +398,23 @@ if __name__ == "__main__":
     logger = Logger(f'{args.save_path}/logs.logs')
 
     # Autoencoder's path
-    # RGB, Depth
-    # args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_Both_3_dr01_gr0/epoch_90_model.pth"
-    # RGB 
-    args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_RGB_3_dr0_gr001/epoch_10_model.pth"
+    args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_Both_3_dr01_gr0/epoch_90_model.pth"
 
    # Pretrained 된 AutoEncoder 생성 (layer3)
     global autoencoder
-    autoencoder = AutoEncoder_RGB(3, False, 0.1).to(args.device)
-    # autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
+    autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
     autoencoder.load_state_dict(torch.load(args.ae_path))
     autoencoder.eval()
 
     # data loader
-    train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset, histogram_stretching=args.hist_stretch)
+    train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset)
 
     # train 코드
-    train(args, train_loader, test_loader)
+    epoch = train(args, train_loader, test_loader)
+    weight_path = f"{args.checkpoint_path}/epoch_{epoch}_model.pth"
 
+    # test 코드
+    test(args, test_loader, weight_path)
     
 
 
