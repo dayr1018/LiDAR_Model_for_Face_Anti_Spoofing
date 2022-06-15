@@ -81,9 +81,10 @@ def train(args, train_loader, test_loader):
 
         for batch, data in enumerate(train_loader, 1):
 
-            rgb_image, depth_image, labels = data            
+            rgb_image, depth_image, pointcloud_data, labels = data            
             rgb_image = rgb_image.to(args.device)
             depth_image = depth_image.to(args.device)
+            pointcloud_data = pointcloud_data.to(args.device).float()
             labels = labels.to(args.device)
 
             # 모델에 태울 데이터 
@@ -97,6 +98,9 @@ def train(args, train_loader, test_loader):
             elif args.model == "rgbdepth-ae":
                 recons_image = autoencoder(rgb_image)
                 inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model =="all": # RGB, Depth, Point Cloud 
+                inputdata = torch.cat((rgb_image, depth_image), dim=1) 
+                inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -104,14 +108,14 @@ def train(args, train_loader, test_loader):
             prob_outputs = f.softmax(outputs,1)[:,1]
 
             loss_ce = ce_loss(outputs, labels)
-            loss_ct = ct_loss(features, labels)
+            # loss_ct = ct_loss(features, labels)
             
             loss = loss_ce
             # loss = loss_ce + args.lamda * loss_ct
             
             writer.add_scalar("Loss/Epoch(Total)", loss, epoch)
             writer.add_scalar("Loss/Epoch(CrossEntropy)", loss_ce, epoch)
-            writer.add_scalar("Loss/Epoch(Center)", loss_ct, epoch)
+            # writer.add_scalar("Loss/Epoch(Center)", loss_ct, epoch)
 
             # 역전파 
             optimizer.zero_grad()
@@ -208,7 +212,7 @@ def test(args, test_loader, model, epoch):
 
     with torch.no_grad():
         for _, data in enumerate(test_loader):
-            rgb_image, depth_image, labels = data
+            rgb_image, depth_image, pointcloud_data, labels = data
 
             # 가우시안 노이즈 추가 
             if args.gr != 0 :
@@ -218,6 +222,7 @@ def test(args, test_loader, model, epoch):
             # 텐서화
             rgb_image = rgb_image.to(args.device) 
             depth_image = depth_image.to(args.device)
+            pointcloud_data = pointcloud_data.to(args.device).float()
             labels = labels.to(args.device)
 
             # 모델에 태울 데이터 
@@ -231,6 +236,9 @@ def test(args, test_loader, model, epoch):
             elif args.model == "rgbdepth-ae":
                 recons_image = autoencoder(rgb_image)
                 inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model =="all": # RGB, Depth, Point Cloud 
+                inputdata = torch.cat((rgb_image, depth_image), dim=1) 
+                inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -352,6 +360,8 @@ if __name__ == "__main__":
         args.inputdata_channel = 4
     elif args.model == "rgbdepth-ae":
         args.inputdata_channel = 4
+    elif args.model == "all": # RGB(ae), Depth, PointCloud
+        args.inputdata_channel = 7
     else:
         print("You need to checkout option 'model' [rgb, depth, ae]")
         sys.exit(0)
