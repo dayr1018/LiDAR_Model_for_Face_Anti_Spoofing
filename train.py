@@ -22,6 +22,8 @@ import argparse
 from loger import Logger
 import os
 import sys
+import time 
+from datetime import timedelta
 
 from utility import plot_roc_curve, cal_metrics, cal_metrics2
 from skimage.util import random_noise
@@ -59,16 +61,8 @@ def train(args, train_loader, test_loader):
     scheduler2 = lr_scheduler.ExponentialLR(optimizer2, gamma=0.95)
 
     # train 
-    accuracy_list = []
-    precision_list = []
-    recall_list = []
-    f1_list = []
-    apcer_list = []
-    npcer_list = []
-    acer_list = []
-    epoch_list = []
-    
-    auc_list = []
+    accuracy_list, precision_list, recall_list, f1_list, epoch_list = [], [], [], [], []
+    apcer_list, npcer_list, acer_list, auc_list = [], [], [], []
 
     for epoch in range(args.epochs):
         model.train()
@@ -82,8 +76,8 @@ def train(args, train_loader, test_loader):
         for batch, data in enumerate(train_loader, 1):
 
             rgb_image, depth_image, pointcloud_data, labels = data            
-            rgb_image = rgb_image.to(args.device)
-            depth_image = depth_image.to(args.device)
+            rgb_image = rgb_image.to(args.device).float()
+            depth_image = depth_image.to(args.device).float()
             pointcloud_data = pointcloud_data.to(args.device).float()
             labels = labels.to(args.device)
 
@@ -98,9 +92,12 @@ def train(args, train_loader, test_loader):
             elif args.model == "rgbdepth-ae":
                 recons_image = autoencoder(rgb_image)
                 inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model == "rgbpc":
+                inputdata = torch.cat((rgb_image, pointcloud_data), dim=1)
             elif args.model =="all": # RGB, Depth, Point Cloud 
                 inputdata = torch.cat((rgb_image, depth_image), dim=1) 
                 inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
+
 
             # 예측 오류 계산 
             outputs, features = model(inputdata)
@@ -220,8 +217,8 @@ def test(args, test_loader, model, epoch):
                 # depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
 
             # 텐서화
-            rgb_image = rgb_image.to(args.device) 
-            depth_image = depth_image.to(args.device)
+            rgb_image = rgb_image.to(args.device).float()
+            depth_image = depth_image.to(args.device).float()
             pointcloud_data = pointcloud_data.to(args.device).float()
             labels = labels.to(args.device)
 
@@ -236,6 +233,8 @@ def test(args, test_loader, model, epoch):
             elif args.model == "rgbdepth-ae":
                 recons_image = autoencoder(rgb_image)
                 inputdata = torch.cat((recons_image, depth_image), dim=1)
+            elif args.model == "rgbpc":
+                inputdata = torch.cat((rgb_image, pointcloud_data), dim=1)
             elif args.model =="all": # RGB, Depth, Point Cloud 
                 inputdata = torch.cat((rgb_image, depth_image), dim=1) 
                 inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
@@ -325,6 +324,8 @@ def test_v2(args, test_loader, weight_path):
 
 if __name__ == "__main__":
 
+    option_start = time.process_time()
+
     # args option
     parser = argparse.ArgumentParser(description='face anto-spoofing')
     parser.add_argument('--ae-path', default='', type=str, help='Pretrained AutoEncoder path')
@@ -349,6 +350,8 @@ if __name__ == "__main__":
     parser.add_argument('--cuda', default=0, type=int, help='gpu number')                                         
     parser.add_argument('--device', default='', type=str, help='device when cuda is available')
     parser.add_argument('--inputdata-channel', default=3, type=int, help='rgb=3, depth=4, ae=8')
+    parser.add_argument('--rgb-norm', default='nothing', type=str, help='This should be std or minmax or nothing')
+    parser.add_argument('--depth-norm', default='nothing', type=str, help='This should be std or minmax or nothing')
     args = parser.parse_args()
 
     # 중요 옵션 체크 및 model type 배정 
@@ -360,6 +363,8 @@ if __name__ == "__main__":
         args.inputdata_channel = 4
     elif args.model == "rgbdepth-ae":
         args.inputdata_channel = 4
+    elif args.model == "rgbpc":
+        args.inputdata_channel = 6   
     elif args.model == "all": # RGB(ae), Depth, PointCloud
         args.inputdata_channel = 7
     else:
@@ -412,20 +417,22 @@ if __name__ == "__main__":
     # RGB 
     args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_RGB_3_dr0_gr001/epoch_10_model.pth"
 
-   # Pretrained 된 AutoEncoder 생성 (layer3)
-    global autoencoder
-    autoencoder = AutoEncoder_RGB(3, False, 0.1).to(args.device)
-    # autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
-    autoencoder.load_state_dict(torch.load(args.ae_path))
-    autoencoder.eval()
-
-    # data loader
-    train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset, histogram_stretching=args.hist_stretch)
-
-    # train 코드
-    train(args, train_loader, test_loader)
-
+    # Pretrained 된 AutoEncoder 생성 (layer3)
+    # global autoencoder
+    # autoencoder = AutoEncoder_RGB(3, False, 0.1).to(args.device)
+    # ### autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
+    # autoencoder.load_state_dict(torch.load(args.ae_path))
+    # autoencoder.eval()
     
+    # data loader
+    dataloader_start = time.process_time()
+    train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset, rgb_norm=args.rgb_norm, depth_norm=args.depth_norm, histogram_stretching=args.hist_stretch)
+    
+    # train 코드
+    train_start = time.process_time()
+    train(args, train_loader, test_loader)
+    train_end = time.process_time()
 
-
-
+    logger.Print(f"Option Execution Time: {timedelta(dataloader_start-option_start)}")  
+    logger.Print(f"Data_Loader Execution Time: {timedelta(train_start-dataloader_start)}")  
+    logger.Print(f"Train Execution Time: {timedelta(train_end-train_start)}")  

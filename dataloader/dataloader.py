@@ -2,6 +2,7 @@
 from torch.utils.data import Dataset,DataLoader
 from torchvision import transforms 
 from torch.utils.data.sampler import SubsetRandomSampler, RandomSampler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from PIL import Image
 import os
 import cv2
@@ -13,7 +14,7 @@ import pandas as pd
 class Face_Data(Dataset):
 
     def __init__(self, metadata_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_code/metadata/', 
-                        data_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/' , data_txt = '', transform=None, histogram_stretching=False):
+                        data_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/' , data_txt = '', transform=None, rgb_norm='nothing', depth_norm='nothing', histogram_stretching=False):
             self.metadata_root = metadata_root
             self.data_root = data_root
             self.transform = transform
@@ -21,7 +22,13 @@ class Face_Data(Dataset):
             self.depth_paths = []
             self.pointcloud_paths = []
             self.labels = []
+            self.rgb_norm = rgb_norm
+            self.depth_norm = depth_norm
             self.histogram_stretching = histogram_stretching
+            
+            self.image_height = 112
+            self.image_width = 112
+            
 
             print(f"histogram stretching:{histogram_stretching}")
 
@@ -46,54 +53,172 @@ class Face_Data(Dataset):
         pointcloud_path = self.pointcloud_paths[index]
         label = int(self.labels[index])
         
+        rgb_array = np.zeros((3, self.image_height, self.image_width))
         pointcloud_array = np.zeros((3,192,256))
+        depth_array = np.zeros((1,192,256))
 
+        size_transformer = transforms.Compose([
+            transforms.Resize((128,128)),
+            transforms.CenterCrop((self.image_height, self.image_width))
+        ])   
 
-        # RGB open 
+        ############ RGB open 
         rgb_image = Image.open(rgb_path).convert('RGB')
-            # Hisgoram Stetching 할 경우 
+        
+        # Hisgoram Stetching 할 경우 
         if self.histogram_stretching == True:
             rgb_image = histogram_stretching(rgb_image)
+            
+        # Size 조정 
+        rgb_image = size_transformer(rgb_image)
+        
+        # 다양한 정규화 조합 적용 
+        if self.rgb_norm == 'nothing':
+            print("[rgb] nothing ")
+            rgb_numpy = np.array(rgb_image)
+            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
+            
+        elif self.rgb_norm == 'std':
+            print("[rgb] std ")
+            # swaped_rgb_np = np.array(rgb_image).swapaxes(0,2)
+            # rgb_array[0] = StandardScaler().fit_transform(swaped_rgb_np[0])
+            # rgb_array[1] = StandardScaler().fit_transform(swaped_rgb_np[1])
+            # rgb_array[2] = StandardScaler().fit_transform(swaped_rgb_np[2])
+            # shapeback_rgb_np = rgb_array.swapaxes(0,2)
+            # # rgb_tensor = torch.from_numpy(shapeback_rgb_np)
+            # rgb_image = Image.fromarray(shapeback_rgb_np.astype(np.uint8))   
+            
+            rgb_numpy = np.array(rgb_image)
+            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
+            rgb_numpy = rgb_tensor.numpy() # C, H, W 인 numpy 생성 
+        
+            # C, H, W 인 rgb_array
+            rgb_array[0] = StandardScaler().fit_transform(rgb_numpy[0])
+            rgb_array[1] = StandardScaler().fit_transform(rgb_numpy[1])
+            rgb_array[2] = StandardScaler().fit_transform(rgb_numpy[2])
+            
+            rgb_tensor = torch.from_numpy(rgb_array)
+            
+        elif self.rgb_norm == 'minmax':
+            print("[rgb] minmax ")
+            
+            minmax_transformer = transforms.Compose([
+                transforms.ToTensor()
+            ])   
+            rgb_tensor = minmax_transformer(rgb_image) 
+            
+        elif self.rgb_norm == 'stdminmax':
+            print("[rgb] stdminmax ")
 
-        # Depth open
+            # std 수행 
+            rgb_numpy = np.array(rgb_image)
+            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
+            rgb_numpy = rgb_tensor.numpy() # C, H, W 인 numpy 생성 
+        
+            # C, H, W 인 rgb_array
+            rgb_array[0] = StandardScaler().fit_transform(rgb_numpy[0])
+            rgb_array[1] = StandardScaler().fit_transform(rgb_numpy[1])
+            rgb_array[2] = StandardScaler().fit_transform(rgb_numpy[2])
+            
+            # minmax 수행 
+            rgb_array[0] = MinMaxScaler().fit_transform(rgb_array[0])
+            rgb_array[1] = MinMaxScaler().fit_transform(rgb_array[1])
+            rgb_array[2] = MinMaxScaler().fit_transform(rgb_array[2])
+            
+            # 텐서로 변경 (permute 필요없음)
+            rgb_tensor = torch.from_numpy(rgb_array)
+   
+        elif self.rgb_norm == 'minmaxstd':
+            print("[rgb] minmaxstd ")
+            
+            minmaxstd_transformer = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize([0,0,0], [1,1,1])
+            ])   
+            rgb_tensor = minmaxstd_transformer(rgb_image)   
+ 
+        
+        ############ Depth open
         depth_image = Image.open(depth_path).convert('L')
 
-        # Point Cloud(PLY) open & 텐서화 
-        plydata = PlyData.read(pointcloud_path)
+        if self.depth_norm == 'std':
+            print("[depth] std_norm do it")
+            swaped_depth_np = np.array(depth_image)#.swapaxes(0,2)
+            depth_array = StandardScaler().fit_transform(swaped_depth_np)
+            shapeback_depth_np = depth_array#.swapaxes(0,2)
+            depth_image = Image.fromarray(shapeback_depth_np.astype(np.uint8))         
 
-        list_x = plydata['vertex']['x']
-        list_y = plydata['vertex']['y']
-        list_z = plydata['vertex']['z']
-        list_depth = plydata['vertex']['depth']
-        list_width = plydata['vertex']['cx']
-        list_height = plydata['vertex']['cy']
+        # Depth 텐서화
+        depth_transfomer = transforms.Compose([
+            transforms.Resize((128,128)),
+            transforms.CenterCrop((112,112)),
+            transforms.ToTensor()
+            # transforms.Normalize(mean=[0.5], std=[1]) #
+        ])
+        depth_tensor = depth_transfomer(depth_image)
+
+
+        ############ Point Cloud(PLY) open 
+        plydata = PlyData.read(pointcloud_path)
+        ply_pd = pd.DataFrame({key_: plydata['vertex'][key_] for key_ in ['x', 'y', 'z', 'red', 'green', 'blue', 'cx', 'cy', 'depth', 'alpha']})
+        
+        # Point Cloud 정규화 (1.MinMax 2.Std 3.nothing)
+        # 1. Std 정규화 
+        if self.depth_norm == 'std':
+            print("[point cloud] std_norm do it")
+            standard_result = StandardScaler().fit_transform(ply_pd)
+            standard_pd = pd.DataFrame(standard_result)
+            standard_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
+
+            list_x = standard_pd['x']
+            list_y = standard_pd['y']
+            list_z = standard_pd['z']
+            list_depth = standard_pd['depth']
+            list_width = plydata['vertex']['cx']
+            list_height = plydata['vertex']['cy']
+        
+        # 2. MinMax 정규화         
+        elif self.depth_norm == 'minmax':  
+            print("[point cloud] minmax_norm do it")               
+            minmax_result = MinMaxScaler().fit_transform(ply_pd)
+            minmax_pd = pd.DataFrame(minmax_result)
+            minmax_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
+
+            list_x = minmax_pd['x']
+            list_y = minmax_pd['y']
+            list_z = minmax_pd['z']
+            list_depth = minmax_pd['depth']
+            list_width = plydata['vertex']['cx']
+            list_height = plydata['vertex']['cy']
+            
+        # 3. Nothing 
+        else:
+            list_x = plydata['vertex']['x']
+            list_y = plydata['vertex']['y']
+            list_z = plydata['vertex']['z']
+            list_depth = plydata['vertex']['depth']
+            list_width = plydata['vertex']['cx']
+            list_height = plydata['vertex']['cy']
 
         for idx in range(49151):
             pointcloud_array[0][int(list_height[idx])][int(list_width[idx])] = list_x[idx]  # [c, h, w]  그리고 h = cy, w = cx
             pointcloud_array[1][int(list_height[idx])][int(list_width[idx])] = list_y[idx]
             pointcloud_array[2][int(list_height[idx])][int(list_width[idx])] = list_z[idx]
-            #depth_array[0][int(list_height[idx])][int(list_width[idx])] = list_depth[idx]
+            depth_array[0][int(list_height[idx])][int(list_width[idx])] = list_depth[idx]
 
+        # Point Cloud 텐서화 
         pointcloud_tensor = torch.from_numpy(pointcloud_array)
-        pointcloud_tensor.resize_(3,128,128)
-
-        # RGB, Depth 텐서화 준비 
-        rgb_transformer = transforms.Compose([
-            transforms.Resize((128,128)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0,0,0], std=[1,1,1])
-        ])   
-
+        pointcloud_tensor.resize_(3,112,112) # 128, 128 이어야 함 
+        # pointcloud_tensor.centercrop_(3,112,112)
+        
         depth_transfomer = transforms.Compose([
             transforms.Resize((128,128)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0], std=[1])
+            transforms.CenterCrop((112,112)),
+            transforms.ToTensor()
+            # transforms.Normalize(mean=[0.5], std=[1]) #
         ])
-
-        # RGB, Depth 텐서화
-        rgb_tensor = rgb_transformer(rgb_image)        
-        depth_tensor = depth_transfomer(depth_image)
-
+        
+    
         # label 텐서화 
         label_tensor = torch.as_tensor(label)
         
@@ -102,12 +227,12 @@ class Face_Data(Dataset):
     def __len__(self):
         return len(self.rgb_paths)
         
-def Facedata_Loader(train_size=64, test_size=64, use_lowdata=True, dataset=0, histogram_stretching=False): 
+def Facedata_Loader(train_size=64, test_size=64, use_lowdata=True, dataset=0, rgb_norm='nothing', depth_norm='nothing', histogram_stretching=False): 
     
     # dataset 종류, use_lowdata 여부 상관 없음 ! 
     print("**** LDFAS Datset is using.")
-    train_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/train_data.txt', histogram_stretching=histogram_stretching)
-    test_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/test_data.txt', histogram_stretching=histogram_stretching) 
+    train_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/train_data.txt', rgb_norm=rgb_norm, depth_norm=depth_norm, histogram_stretching=histogram_stretching)
+    test_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/test_data.txt', rgb_norm=rgb_norm, depth_norm=depth_norm, histogram_stretching=histogram_stretching) 
 
     train_loader = DataLoader(dataset=train_data, batch_size=train_size, shuffle=True, num_workers=8)
     test_loader = DataLoader(dataset=test_data, batch_size=test_size, shuffle=True, num_workers=8)
