@@ -25,15 +25,10 @@ class Face_Data(Dataset):
             self.rgb_norm = rgb_norm
             self.depth_norm = depth_norm
             self.histogram_stretching = histogram_stretching
-            
-            self.image_height = 112
-            self.image_width = 112
-            
-
-            print(f"histogram stretching:{histogram_stretching}")
+            self.croped_height = 112
+            self.croped_width = 112
 
             lines_in_txt = open(os.path.join(metadata_root, data_txt),'r')
-
             for line in lines_in_txt:
                 line = line.rstrip() 
                 split_str = line.split()
@@ -42,6 +37,7 @@ class Face_Data(Dataset):
                 depth_path = os.path.join(data_root, split_str[1])
                 pointcloud_path = os.path.join(data_root, split_str[2])
                 label = split_str[3] 
+                
                 self.rgb_paths.append(rgb_path)
                 self.depth_paths.append(depth_path)
                 self.pointcloud_paths.append(pointcloud_path)
@@ -52,14 +48,10 @@ class Face_Data(Dataset):
         depth_path = self.depth_paths[index]
         pointcloud_path = self.pointcloud_paths[index]
         label = int(self.labels[index])
-        
-        rgb_array = np.zeros((3, self.image_height, self.image_width))
-        pointcloud_array = np.zeros((3,192,256))
-        depth_array = np.zeros((1,192,256))
-
+ 
         size_transformer = transforms.Compose([
             transforms.Resize((128,128)),
-            transforms.CenterCrop((self.image_height, self.image_width))
+            transforms.CenterCrop((self.croped_height, self.croped_width))
         ])   
 
         ############ RGB open 
@@ -69,17 +61,12 @@ class Face_Data(Dataset):
         if self.histogram_stretching == True:
             rgb_image = histogram_stretching(rgb_image)
             
-        # Size 조정 
-        rgb_image = size_transformer(rgb_image)
-        
         # 다양한 정규화 조합 적용 
         if self.rgb_norm == 'nothing':
-            print("[rgb] nothing ")
             rgb_numpy = np.array(rgb_image)
             rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
             
         elif self.rgb_norm == 'std':
-            print("[rgb] std ")
             # swaped_rgb_np = np.array(rgb_image).swapaxes(0,2)
             # rgb_array[0] = StandardScaler().fit_transform(swaped_rgb_np[0])
             # rgb_array[1] = StandardScaler().fit_transform(swaped_rgb_np[1])
@@ -88,84 +75,119 @@ class Face_Data(Dataset):
             # # rgb_tensor = torch.from_numpy(shapeback_rgb_np)
             # rgb_image = Image.fromarray(shapeback_rgb_np.astype(np.uint8))   
             
+            # rgb numpy를 tensor로 바꾸고 (H,W,C) -> (C,H,W) 로 변경  
             rgb_numpy = np.array(rgb_image)
             rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
-            rgb_numpy = rgb_tensor.numpy() # C, H, W 인 numpy 생성 
-        
-            # C, H, W 인 rgb_array
-            rgb_array[0] = StandardScaler().fit_transform(rgb_numpy[0])
-            rgb_array[1] = StandardScaler().fit_transform(rgb_numpy[1])
-            rgb_array[2] = StandardScaler().fit_transform(rgb_numpy[2])
             
-            rgb_tensor = torch.from_numpy(rgb_array)
+            # 표준화 수행
+            rgb_numpy = rgb_tensor.numpy() 
+             
+            rgb_numpy[0] = StandardScaler().fit_transform(rgb_numpy[0])
+            rgb_numpy[1] = StandardScaler().fit_transform(rgb_numpy[1])
+            rgb_numpy[2] = StandardScaler().fit_transform(rgb_numpy[2])
             
-        elif self.rgb_norm == 'minmax':
-            print("[rgb] minmax ")
+            rgb_tensor = torch.from_numpy(rgb_numpy)
             
+        elif self.rgb_norm == 'minmax':           
             minmax_transformer = transforms.Compose([
                 transforms.ToTensor()
             ])   
             rgb_tensor = minmax_transformer(rgb_image) 
             
         elif self.rgb_norm == 'stdminmax':
-            print("[rgb] stdminmax ")
-
-            # std 수행 
-            rgb_numpy = np.array(rgb_image)
+            
+            # rgb numpy를 tensor로 바꾸고 (H,W,C) -> (C,H,W) 로 변경  
+            rgb_numpy = np.array(rgb_image)            
             rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
-            rgb_numpy = rgb_tensor.numpy() # C, H, W 인 numpy 생성 
+            
+            # 표준화 수행
+            rgb_numpy = rgb_tensor.numpy() 
         
-            # C, H, W 인 rgb_array
-            rgb_array[0] = StandardScaler().fit_transform(rgb_numpy[0])
-            rgb_array[1] = StandardScaler().fit_transform(rgb_numpy[1])
-            rgb_array[2] = StandardScaler().fit_transform(rgb_numpy[2])
+            rgb_numpy[0] = StandardScaler().fit_transform(rgb_numpy[0])
+            rgb_numpy[1] = StandardScaler().fit_transform(rgb_numpy[1])
+            rgb_numpy[2] = StandardScaler().fit_transform(rgb_numpy[2])
             
             # minmax 수행 
-            rgb_array[0] = MinMaxScaler().fit_transform(rgb_array[0])
-            rgb_array[1] = MinMaxScaler().fit_transform(rgb_array[1])
-            rgb_array[2] = MinMaxScaler().fit_transform(rgb_array[2])
+            rgb_numpy[0] = MinMaxScaler().fit_transform(rgb_numpy[0])
+            rgb_numpy[1] = MinMaxScaler().fit_transform(rgb_numpy[1])
+            rgb_numpy[2] = MinMaxScaler().fit_transform(rgb_numpy[2])
             
             # 텐서로 변경 (permute 필요없음)
-            rgb_tensor = torch.from_numpy(rgb_array)
+            rgb_tensor = torch.from_numpy(rgb_numpy)
    
-        elif self.rgb_norm == 'minmaxstd':
-            print("[rgb] minmaxstd ")
-            
+        elif self.rgb_norm == 'minmaxstd':            
             minmaxstd_transformer = transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Normalize([0,0,0], [1,1,1])
             ])   
             rgb_tensor = minmaxstd_transformer(rgb_image)   
  
-        
+         # 이미지 크기 조정 
+        rgb_tensor = size_transformer(rgb_tensor)
+           
         ############ Depth open
         depth_image = Image.open(depth_path).convert('L')
 
-        if self.depth_norm == 'std':
-            print("[depth] std_norm do it")
-            swaped_depth_np = np.array(depth_image)#.swapaxes(0,2)
-            depth_array = StandardScaler().fit_transform(swaped_depth_np)
-            shapeback_depth_np = depth_array#.swapaxes(0,2)
-            depth_image = Image.fromarray(shapeback_depth_np.astype(np.uint8))         
+        # 다양한 정규화 조합 적용 
+        if self.depth_norm == 'nothing':
+            
+            # depth numpy를 (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경((H,W,C) -> (C,H,W) 도 변경)  
+            depth_numpy = np.array(depth_image)[:, :, np.newaxis]
+            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
 
-        # Depth 텐서화
-        depth_transfomer = transforms.Compose([
-            transforms.Resize((128,128)),
-            transforms.CenterCrop((112,112)),
-            transforms.ToTensor()
-            # transforms.Normalize(mean=[0.5], std=[1]) #
-        ])
-        depth_tensor = depth_transfomer(depth_image)
-
-
+        elif self.depth_norm == 'std':
+                        
+            # depth numpy 표준화 수행 
+            depth_numpy = np.array(depth_image)
+            depth_numpy = StandardScaler().fit_transform(depth_numpy)
+            
+            # (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경 (shapeh도 (H,W,C) -> (C,H,W) 도 변경)  
+            depth_numpy = depth_numpy[:, :, np.newaxis]
+            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
+            
+        elif self.depth_norm == 'minmax':   
+            minmax_transformer = transforms.Compose([
+                transforms.ToTensor()
+            ])   
+            depth_tensor = minmax_transformer(depth_image)                     
+            
+        elif self.depth_norm == 'stdminmax':
+            
+            # depth numpy 표준화, MinMax 정규화 수행 
+            depth_numpy = np.array(depth_image)
+            depth_numpy = StandardScaler().fit_transform(depth_numpy)
+            depth_numpy = MinMaxScaler().fit_transform(depth_numpy)
+            
+            # (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경 (shapeh도 (H,W,C) -> (C,H,W) 도 변경)  
+            depth_numpy = depth_numpy[:, :, np.newaxis]
+            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
+   
+        elif self.depth_norm == 'minmaxstd':            
+            minmaxstd_transformer = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize([0], [1])
+            ])   
+            depth_tensor = minmaxstd_transformer(depth_image)   
+            
+         # 이미지 크기 조정 
+        depth_tensor = size_transformer(depth_tensor)
+        
         ############ Point Cloud(PLY) open 
         plydata = PlyData.read(pointcloud_path)
         ply_pd = pd.DataFrame({key_: plydata['vertex'][key_] for key_ in ['x', 'y', 'z', 'red', 'green', 'blue', 'cx', 'cy', 'depth', 'alpha']})
         
-        # Point Cloud 정규화 (1.MinMax 2.Std 3.nothing)
-        # 1. Std 정규화 
-        if self.depth_norm == 'std':
-            print("[point cloud] std_norm do it")
+        # cx, cy 
+        list_width = plydata['vertex']['cx']
+        list_height = plydata['vertex']['cy']
+        
+        # Point Cloud 정규화 적용 
+        if self.depth_norm == 'nothing':
+            list_x = plydata['vertex']['x']
+            list_y = plydata['vertex']['y']
+            list_z = plydata['vertex']['z']
+            list_depth = plydata['vertex']['depth']
+            
+        elif self.depth_norm == 'std':
             standard_result = StandardScaler().fit_transform(ply_pd)
             standard_pd = pd.DataFrame(standard_result)
             standard_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
@@ -174,12 +196,8 @@ class Face_Data(Dataset):
             list_y = standard_pd['y']
             list_z = standard_pd['z']
             list_depth = standard_pd['depth']
-            list_width = plydata['vertex']['cx']
-            list_height = plydata['vertex']['cy']
-        
-        # 2. MinMax 정규화         
-        elif self.depth_norm == 'minmax':  
-            print("[point cloud] minmax_norm do it")               
+            
+        elif self.depth_norm == 'minmax':   
             minmax_result = MinMaxScaler().fit_transform(ply_pd)
             minmax_pd = pd.DataFrame(minmax_result)
             minmax_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
@@ -188,36 +206,41 @@ class Face_Data(Dataset):
             list_y = minmax_pd['y']
             list_z = minmax_pd['z']
             list_depth = minmax_pd['depth']
-            list_width = plydata['vertex']['cx']
-            list_height = plydata['vertex']['cy']
             
-        # 3. Nothing 
-        else:
-            list_x = plydata['vertex']['x']
-            list_y = plydata['vertex']['y']
-            list_z = plydata['vertex']['z']
-            list_depth = plydata['vertex']['depth']
-            list_width = plydata['vertex']['cx']
-            list_height = plydata['vertex']['cy']
+        elif self.depth_norm == 'stdminmax':
+            standard_result = StandardScaler().fit_transform(ply_pd)
+            minmax_result = MinMaxScaler().fit_transform(standard_result)
+            stdminmax_pd = pd.DataFrame(minmax_result)
+            stdminmax_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
+
+            list_x = stdminmax_pd['x']
+            list_y = stdminmax_pd['y']
+            list_z = stdminmax_pd['z']
+            list_depth = stdminmax_pd['depth']
+   
+        elif self.depth_norm == 'minmaxstd':      
+            minmax_result = MinMaxScaler().fit_transform(ply_pd)
+            standard_result = StandardScaler().fit_transform(minmax_result)
+            minmaxstd_pd = pd.DataFrame(standard_result)
+            minmaxstd_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
+
+            list_x = minmaxstd_pd['x']
+            list_y = minmaxstd_pd['y']
+            list_z = minmaxstd_pd['z']
+            list_depth = minmaxstd_pd['depth']
+    
+        # (C, H, W) 인 Point Cloud Array 에 저장
+        pointcloud_array = np.zeros((3, 192, 256)) 
 
         for idx in range(49151):
             pointcloud_array[0][int(list_height[idx])][int(list_width[idx])] = list_x[idx]  # [c, h, w]  그리고 h = cy, w = cx
             pointcloud_array[1][int(list_height[idx])][int(list_width[idx])] = list_y[idx]
             pointcloud_array[2][int(list_height[idx])][int(list_width[idx])] = list_z[idx]
-            depth_array[0][int(list_height[idx])][int(list_width[idx])] = list_depth[idx]
+            # depth_array[0][int(list_height[idx])][int(list_width[idx])] = list_depth[idx]
 
-        # Point Cloud 텐서화 
+        # Tensor로 변경 후 이미지 크기 조정 
         pointcloud_tensor = torch.from_numpy(pointcloud_array)
-        pointcloud_tensor.resize_(3,112,112) # 128, 128 이어야 함 
-        # pointcloud_tensor.centercrop_(3,112,112)
-        
-        depth_transfomer = transforms.Compose([
-            transforms.Resize((128,128)),
-            transforms.CenterCrop((112,112)),
-            transforms.ToTensor()
-            # transforms.Normalize(mean=[0.5], std=[1]) #
-        ])
-        
+        pointcloud_tensor = size_transformer(pointcloud_tensor)   
     
         # label 텐서화 
         label_tensor = torch.as_tensor(label)
@@ -238,7 +261,6 @@ def Facedata_Loader(train_size=64, test_size=64, use_lowdata=True, dataset=0, rg
     test_loader = DataLoader(dataset=test_data, batch_size=test_size, shuffle=True, num_workers=8)
 
     return train_loader, test_loader
-
 
 # class Face_Data(Dataset):
 

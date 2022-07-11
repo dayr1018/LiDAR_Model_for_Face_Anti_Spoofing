@@ -324,7 +324,7 @@ def test_v2(args, test_loader, weight_path):
 
 if __name__ == "__main__":
 
-    option_start = time.process_time()
+    option_start = time.time()
 
     # args option
     parser = argparse.ArgumentParser(description='face anto-spoofing')
@@ -425,14 +425,18 @@ if __name__ == "__main__":
     # autoencoder.eval()
     
     # data loader
-    dataloader_start = time.process_time()
+    dataloader_start = time.time()
     train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset, rgb_norm=args.rgb_norm, depth_norm=args.depth_norm, histogram_stretching=args.hist_stretch)
     
     # train 코드
-    train_start = time.process_time()
+    train_start = time.time()
     train(args, train_loader, test_loader)
-    train_end = time.process_time()
+    train_end = time.time()
 
-    logger.Print(f"Option Execution Time: {timedelta(dataloader_start-option_start)}")  
-    logger.Print(f"Data_Loader Execution Time: {timedelta(train_start-dataloader_start)}")  
-    logger.Print(f"Train Execution Time: {timedelta(train_end-train_start)}")  
+    option_time = str(timedelta(seconds=dataloader_start-option_start)).split(".")
+    dataloader_time = str(timedelta(seconds=train_start-dataloader_start)).split(".")
+    train_time = str(timedelta(seconds=train_end-train_start)).split(".")
+    
+    logger.Print(f"Opt Execute: {option_time}")  
+    logger.Print(f"Data Loader: {dataloader_time}")  
+    logger.Print(f"Train Execute: {train_time}")  
