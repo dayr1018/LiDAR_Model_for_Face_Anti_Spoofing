@@ -1,8 +1,24 @@
 # python train.py --depth true --model layer4_4to4 --cuda 0 --gr 50 --dr 0.5 --message 0202_layer4_4to4_g50 
 
+import os
+import os.path as osp
+import sys
+import time 
+from datetime import timedelta
+from datetime import datetime
+import random
+import time
+from tqdm import tqdm
+from collections import Counter
+
+import pandas as pd
+import numpy as np
+import argparse
+from IPython.display import display
+from sklearn.metrics import f1_score, accuracy_score, confusion_matrix, classification_report
+
 import torch
 import torch.nn as nn
-import torch.nn.init as init
 import torch.nn.functional as f
 from torch.optim import lr_scheduler
 from torchinfo import summary
@@ -12,21 +28,8 @@ from models.AutoEncoder import AutoEncoder_RGB, AutoEncoder_Depth
 from models.AutoEncoder import AutoEncoder_Intergrated_Basic, AutoEncoder_Intergrated_Proposed
 from models.Network import Face_Detection_Model
 from dataloader.dataloader import Facedata_Loader
-from centerloss import CenterLoss
-
-import numpy as np
-import random
-import time
-from datetime import datetime
-import argparse
-from loger import Logger
-import os
-import sys
-import time 
-from datetime import timedelta
-
 from utility import plot_roc_curve, cal_metrics, cal_metrics2
-from skimage.util import random_noise
+from loger import Logger
 
 def booltype(str):
     if isinstance(str, bool):
@@ -38,339 +41,220 @@ def booltype(str):
     else:
         raise argparse.ArgumentError("Boolean value expected")
 
+def model_save(model,epoch,optimizer,train_loss,val_loss,train_f1,valid_f1,path) :
+    torch.save({
+                'model_state_dict': model.state_dict(),
+                'epoch': epoch,
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss' : val_loss,
+                'train_f1' : train_f1,
+                'val_f1' : valid_f1
+                }, path)
+    print('Model Save ! > ',path)
+
 def train(args, train_loader, test_loader):
 
     # Tensorboard 
     global writer
-    writer = SummaryWriter(f"runs/{args.message}")
+    # writer = SummaryWriter(f"runs/{args.message}")
 
     # args 출력
     logger.Print(args)
 
     # Model 생성 및 아키텍쳐 출력 
-    model = Face_Detection_Model(args.inputdata_channel).to(args.device)
-    summary(model)
-
+    model = Face_Detection_Model(args.inputchannel).to(args.device)
+    # summary(model)
+    
     # Loss, 옵티마이저, 스케줄러 생성 
-    ce_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-
-    ct_loss = CenterLoss(num_classes=2, feat_dim=512, use_gpu=True, device=args.device)
-    optimizer2 = torch.optim.Adam(ct_loss.parameters(), lr=args.lr)
-    scheduler2 = lr_scheduler.ExponentialLR(optimizer2, gamma=0.95)
-
-    # train 
-    accuracy_list, precision_list, recall_list, f1_list, epoch_list = [], [], [], [], []
-    apcer_list, npcer_list, acer_list, auc_list = [], [], [], []
-
-    for epoch in range(args.epochs):
-        model.train()
-
-        logger.Print(f"***** << Training epoch:{epoch} >>")  
+    # scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
         
-        y_true = []
-        y_pred = []
-        y_prob = []
+    # Train 
+    train_performs, test_performs = {'ACC':[],'F1':[]},{'ACC':[],'F1':[], 'Info':[]}
+    best_test_f1 = 0
+    best_test_epoch = 0
+    start_epoch = 0
+    epochs = args.epochs
+    sigmoid = nn.Sigmoid()
+    loss_fn = nn.BCEWithLogitsLoss()
 
-        for batch, data in enumerate(train_loader, 1):
+    start_time = datetime.now()
+    for epoch in range(start_epoch, epochs) :
+        model.train()
+        train_loss = []
+        train_probs, train_labels = [],[]
+        train_bar = tqdm(enumerate(train_loader))
+        for step, data in train_bar :  
+            rgb, cloud, depth, label = data
+            rgb = rgb.float().to(args.device)
+            cloud = cloud.float().to(args.device)
+            depth = depth.float().to(args.device)
+            label = label.float().to(args.device)
 
-            rgb_image, depth_image, pointcloud_data, labels = data            
-            rgb_image = rgb_image.to(args.device).float()
-            depth_image = depth_image.to(args.device).float()
-            pointcloud_data = pointcloud_data.to(args.device).float()
-            labels = labels.to(args.device)
-
-            # 모델에 태울 데이터 
-            inputdata = rgb_image     
-            if args.model == "rgb":
-                inputdata = rgb_image
-            elif args.model == "rgb-ae":
-                inputdata = autoencoder(rgb_image)
-            elif args.model == "rgbdepth":
-                inputdata = torch.cat((rgb_image, depth_image), dim=1)
-            elif args.model == "rgbdepth-ae":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
-            elif args.model == "rgbpc":
-                inputdata = torch.cat((rgb_image, pointcloud_data), dim=1)
-            elif args.model =="all": # RGB, Depth, Point Cloud 
-                inputdata = torch.cat((rgb_image, depth_image), dim=1) 
-                inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
-
-
-            # 예측 오류 계산 
-            outputs, features = model(inputdata)
-            _, pred_outputs = torch.max(outputs, 1)
-            prob_outputs = f.softmax(outputs,1)[:,1]
-
-            loss_ce = ce_loss(outputs, labels)
-            # loss_ct = ct_loss(features, labels)
-            
-            loss = loss_ce
-            # loss = loss_ce + args.lamda * loss_ct
-            
-            writer.add_scalar("Loss/Epoch(Total)", loss, epoch)
-            writer.add_scalar("Loss/Epoch(CrossEntropy)", loss_ce, epoch)
-            # writer.add_scalar("Loss/Epoch(Center)", loss_ct, epoch)
-
-            # 역전파 
+            features = rgb
+            if args.model == "rgbd":
+                features = torch.cat([rgb, depth], dim=1)
+            elif args.model == "rgbp":
+                features = torch.cat([rgb, cloud], dim=1)
+            elif args.model == "rgbdp":
+                features = torch.cat([rgb, depth, cloud], dim=1)  
+     
             optimizer.zero_grad()
-            optimizer2.zero_grad()
+            logits, _ = model(features)
+            
+            logits = logits[:,0]  # logtit (4.2) 텐서이던데 첫째는 batch 이겠고. 근데 왜 0번째 값만 쓸까?
+            loss = loss_fn(logits, label.float())
             loss.backward()
             optimizer.step()
-            optimizer2.step()  
-
-            y_pred.extend(pred_outputs.data.cpu().numpy())
-            y_prob.extend(prob_outputs.data.cpu().numpy())
-            y_true.extend(labels.data.cpu().numpy())
-
-            if batch % 10 == 0:
-                loss, current = loss.item(), batch * len(data[0])
-                print(f"***** loss: {loss:>7f}  [{current:>5d}/{len(train_loader.dataset):>5d}] [{batch}:{len(data[0])}]")
-
-        scheduler.step()
-        scheduler2.step()
-
-        if (epoch%5) == 0 or epoch == (args.epochs-1):
-            accuracy, precision, recall, f1, apcer, npcer, acer = test(args, test_loader, model, epoch)
-            logger.Print(f"***** Current Epoch:{epoch}, accuracy:{accuracy:3f}, f1:{f1:3f}, apcer:{apcer:3f}, npcer:{npcer:3f}, acer:{acer:3f}")  
-            accuracy_list.append(accuracy)
-            precision_list.append(precision)
-            recall_list.append(recall)
-            f1_list.append(f1)
-            apcer_list.append(apcer)
-            npcer_list.append(npcer)
-            acer_list.append(acer)
-            epoch_list.append(epoch)
-
-            writer.add_scalar("Accuracy/Epoch (Test)", accuracy, epoch)
-            writer.add_scalar("F1/Epoch (Test)", f1, epoch)
-            writer.add_scalar("Other Evaluation - APCER/Epoch (Test)", apcer, epoch)
-            writer.add_scalar("Other Evaluation - NPCER/Epoch (Test)", npcer, epoch)
-            writer.add_scalar("Other Evaluation - ACER/Epoch (Test)", acer, epoch)
-
-            # 0, 5, 10, ... 순서대로 weight들 저장   
-            checkpoint = f'{args.checkpoint_path}/epoch_{epoch}_model.pth'
-            torch.save(model.state_dict(), checkpoint)
-
-            # 결과 나타내기 (ROC 커브)
-            auc_value = plot_roc_curve(args.save_path, f"epoch{epoch}_", y_true, y_prob)
-            writer.add_scalar("Other Evaluation - AUC_Value/Epoch (Test)", auc_value, epoch)
-
-            auc_list.append(auc_value)
-
-    max_accuracy = max(accuracy_list)
-    index = accuracy_list.index(max_accuracy)
-    ma_precision = precision_list[index]
-    ma_recall = recall_list[index]
-    ma_f1 = f1_list[index]
-    ma_apcer = apcer_list[index]
-    ma_npcer = npcer_list[index]
-    ma_acer = acer_list[index]
-    ma_auc = auc_list[index]
-    ma_epoch = epoch_list[index]
-
-    logger.Print(f"***** Total Accuracy per epoch")
-    logger.Print(accuracy_list)
-    logger.Print(f"***** Total Precision per epoch")
-    logger.Print(precision_list)
-    logger.Print(f"***** Total Recall per epoch")
-    logger.Print(recall_list)
-    logger.Print(f"***** Total F1 per epoch")
-    logger.Print(f1_list)
-    logger.Print(f"***** Total AUC Value")
-    logger.Print(auc_list)
-    logger.Print(f"***** Total Epoch")
-    logger.Print(epoch_list)
-
-    logger.Print(f"\n***** Result (Test)")
-    logger.Print(f"Accuracy: {max_accuracy:3f}")
-    logger.Print(f"Precision: {ma_precision:3f}")
-    logger.Print(f"Recall: {ma_recall:3f}")
-    logger.Print(f"F1: {ma_f1:3f}")
-    logger.Print(f"APCER: {ma_apcer:3f}")
-    logger.Print(f"NPCER: {ma_npcer:3f}")
-    logger.Print(f"ACER: {ma_acer:3f}")
-    logger.Print(f"AUC Value: {ma_auc:3f}")
-    logger.Print(f"Epoch: {ma_epoch}")
-
-    writer.close()   
-
-def test(args, test_loader, model, epoch):
-
-    model.eval()
-
-    y_true = []
-    y_pred = []
-    y_prob = []
-
-    ce_loss = nn.CrossEntropyLoss()
-
-    with torch.no_grad():
-        for _, data in enumerate(test_loader):
-            rgb_image, depth_image, pointcloud_data, labels = data
-
-            # 가우시안 노이즈 추가 
-            if args.gr != 0 :
-                rgb_image =torch.FloatTensor(random_noise(rgb_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-                # depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-
-            # 텐서화
-            rgb_image = rgb_image.to(args.device).float()
-            depth_image = depth_image.to(args.device).float()
-            pointcloud_data = pointcloud_data.to(args.device).float()
-            labels = labels.to(args.device)
-
-            # 모델에 태울 데이터 
-            inputdata = rgb_image     
-            if args.model == "rgb":
-                inputdata = rgb_image
-            elif args.model == "rgb-ae":
-                inputdata = autoencoder(rgb_image)
-            elif args.model == "rgbdepth":
-                inputdata = torch.cat((rgb_image, depth_image), dim=1)
-            elif args.model == "rgbdepth-ae":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
-            elif args.model == "rgbpc":
-                inputdata = torch.cat((rgb_image, pointcloud_data), dim=1)
-            elif args.model =="all": # RGB, Depth, Point Cloud 
-                inputdata = torch.cat((rgb_image, depth_image), dim=1) 
-                inputdata = torch.cat((inputdata, pointcloud_data), dim=1) 
-
-            # 예측 오류 계산 
-            outputs, features = model(inputdata)
-            _, pred_outputs = torch.max(outputs, 1)
-            prob_outputs = f.softmax(outputs,1)[:,1]
-
-            vloss_ce = ce_loss(outputs, labels)
-            writer.add_scalar("CrossEntropy Loss/Epoch (Test)", vloss_ce, epoch)
+            
+            probs = sigmoid(logits)
+            train_loss.append(loss.item())
+            train_probs += probs.cpu().detach().tolist()
+            train_labels += label.cpu().detach().tolist()
+            
+            train_bar.set_description("[Train] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(train_loader),
+                                                        round(loss.item(),5),round(np.array(train_loss).mean(),5)
+                                                                ))
+            
+        train_acc = accuracy_score(np.array(train_labels), np.round(train_probs))
+        train_f1 = f1_score(np.array(train_labels), np.round(train_probs), average='macro')
+        logger.Print(f'Train Accuracy : {train_acc:.4f}')
+        logger.Print(f'Train F1-score : {train_f1:.4f}')
+        train_performs['ACC'].append(train_acc)
+        train_performs['F1'].append(train_f1)
+        logger.Print(f'  > Counter(train_labels) : {Counter(train_labels)}')
+        logger.Print(f'  > Counter(train_preds) : {Counter(np.round(train_probs))}')
+        cf = confusion_matrix(np.array(train_labels), np.round(train_probs))
+        cf = pd.DataFrame(cf)
+        cf.columns = ['Predicted:0','Predicted:1']
+        cf.index = ['Label:0','Label:1']    
+        logger.Print(' --- [Train] Confustion_Matrix & Classification_Report --- ')
         
-            y_pred.extend(pred_outputs.data.cpu().numpy())
-            y_prob.extend(prob_outputs.data.cpu().numpy())
-            y_true.extend(labels.data.cpu().numpy())
-
-    # 성능 평가 
-    accuracy, precision, recall, f1 = cal_metrics(y_true, y_pred)
-    apcer, npcer, acer = cal_metrics2(y_true, y_pred)
-
-    return accuracy, precision, recall, f1, apcer, npcer, acer
-
-def test_v2(args, test_loader, weight_path):
-    model = Face_Detection_Model(args.inputdata_channel).to(args.device)
-    model.load_state_dict(torch.load(weight_path))
-    model.eval()
-
-    y_true = []
-    y_pred = []
-    y_prob = []
-
-    for batch, data in enumerate(test_loader, 1):
-
-        rgb_image, depth_image, labels = data            
-        rgb_image = rgb_image.to(args.device)
-        depth_image = depth_image.to(args.device)
-        labels = labels.to(args.device)
-
-    with torch.no_grad():
-        for _, data in enumerate(test_loader):
-            rgb_image, depth_image, labels = data
-
-            # 가우시안 노이즈 추가 
-            if args.gr != 0 :
-                rgb_image =torch.FloatTensor(random_noise(rgb_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-                # depth_image =torch.FloatTensor(random_noise(depth_image, mode='gaussian', mean=0, var=args.gr, clip=True))
-
-            # 텐서화
-            rgb_image = rgb_image.to(args.device) 
-            depth_image = depth_image.to(args.device)
-            labels = labels.to(args.device)
-
-            # 모델에 태울 데이터 
-            inputdata = rgb_image     
-            if args.model == "rgb":
-                inputdata = rgb_image
-            elif args.model == "ae":
-                inputdata = autoencoder(rgb_image)
-            elif args.model == "depth":
-                recons_image = autoencoder(rgb_image)
-                inputdata = torch.cat((recons_image, depth_image), dim=1)
-
-            # 예측 오류 계산 
-            outputs, features = model(inputdata)
-            _, pred_outputs = torch.max(outputs, 1)
-            prob_outputs = f.softmax(outputs,1)[:,1]
+        # display(cf)
+        logger.Print(cf.to_string())
+        report = classification_report(np.array(train_labels), np.round(train_probs))
+        logger.Print(report)
         
-            y_pred.extend(pred_outputs.data.cpu().numpy())
-            y_prob.extend(prob_outputs.data.cpu().numpy())
-            y_true.extend(labels.data.cpu().numpy())
+        model.eval()
+        test_loss = []
+        test_probs, test_labels = [],[]
+        test_bar = tqdm(enumerate(test_loader))
+        for step, data in test_bar :  
+            rgb, cloud, depth, label = data
+            rgb = rgb.float().to(args.device)
+            cloud = cloud.float().to(args.device)
+            depth = depth.float().to(args.device)
+            label = label.float().to(args.device)
+            
+            features = rgb
+            if args.model == "rgbd":
+                features = torch.cat([rgb, depth], dim=1)
+            elif args.model == "rgbp":
+                features = torch.cat([rgb, cloud], dim=1)
+            elif args.model == "rgbdp":
+                features = torch.cat([rgb, depth, cloud], dim=1)  
 
-    accuracy, precision, recall, f1 = cal_metrics(y_true, y_pred)
-    apcer, npcer, acer = cal_metrics2(y_true, y_pred)
-    auc_value = plot_roc_curve(args.save_path_test, f"epoch{epoch}_", y_true, y_prob)
-
-    logger.Print(f"\n***** Result (Test)")
-    logger.Print(f"Accuracy: {accuracy:3f}")
-    logger.Print(f"Precision: {precision:3f}")
-    logger.Print(f"Recall: {recall:3f}")
-    logger.Print(f"F1: {f1:3f}")
-    logger.Print(f"APCER: {apcer:3f}")
-    logger.Print(f"NPCER: {npcer:3f}")
-    logger.Print(f"ACER: {acer:3f}")
-    logger.Print(f"AUC Value: {auc_value:3f}")
-
-    return accuracy, precision, recall, f1, apcer, npcer, acer
+            logits,_ = model(features)
+            logits = logits[:,0]
+            loss = loss_fn(logits,label.float())
+            
+            probs = sigmoid(logits)
+            test_loss.append(loss.item())
+            test_probs += probs.cpu().detach().tolist()
+            test_labels += label.cpu().detach().tolist()        
+            test_bar.set_description("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(test_loader),
+                                                        round(loss.item(),5),round(np.array(test_loss).mean(),5)
+                                                                ))
+        test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
+        test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
+        logger.Print(f'Test Accuracy : {test_acc:.4f}')
+        logger.Print(f'Test F1-score : {test_f1:.4f}')
+        test_performs['ACC'].append(test_acc)
+        test_performs['F1'].append(test_f1)
+        logger.Print(f'  > Counter(test_labels) : {Counter(test_labels)}')
+        logger.Print(f'  > Counter(test_probs) : {Counter(np.round(test_probs))}')
+        test_cf = confusion_matrix(np.array(test_labels), np.round(test_probs))
+        test_cf = pd.DataFrame(test_cf)
+        test_cf.columns = ['Predicted:0','Predicted:1']
+        test_cf.index = ['Label:0','Label:1']    
+        logger.Print(' --- [Test] Confustion_Matrix & Classification_Report --- ')
+        # display(test_cf)
+        logger.Print(test_cf.to_string())
+        test_performs['Info'].append(test_cf.to_string())
+        test_report = classification_report(np.array(test_labels), np.round(test_probs))
+        logger.Print(test_report)
+            
+        if best_test_f1 < test_f1 :
+            logger.Print(' @@ New Best test_f1 !! @@ ')
+            best_test_f1 = test_f1 
+            best_test_epoch = epoch
+            logger.Print(f' @@ Best Test Accuracy : {np.array(test_performs["ACC"]).max()}')
+            logger.Print(f' @@ Best Test F1-Score : {best_test_f1}')
+            logger.Print(f' @@ Best Test Epoch : {epoch}')
+            logger.Print(f'Saving Model ..... ')
+            model_save(model,epoch+1,optimizer,np.array(train_loss).mean(),np.array(test_loss).mean(),
+                    train_f1,test_f1,
+                    osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))          
+    
+    f1_max = np.array(test_performs["F1"]).max()
+    index = test_performs["F1"].index(f1_max)
+            
+    logger.Print(' @@ THE END @@ ')
+    logger.Print(f'  > Train Best Accuracy : {np.array(train_performs["ACC"]).max():.4f}')
+    logger.Print(f'  > Train Best F1-Score : {np.array(train_performs["F1"]).max():.4f}')
+    logger.Print(f'  > Test Best Accuracy : {np.array(test_performs["ACC"]).max():.4f}')
+    logger.Print(f'  > Test Best F1-Score : {np.array(test_performs["F1"]).max():.4f}')
+    logger.Print(f'  > Test Epoch (Best F1-Score):{best_test_epoch+1} / index(epoch-1): {index}')
+    logger.Print(f'  > Test Best CF') 
+    logger.Print(f'  > {np.array(test_performs["Info"][index])}')
+    logger.Print(f'')
+    
+    
+    return datetime.now() - start_time
 
 if __name__ == "__main__":
 
-    option_start = time.time()
-
     # args option
     parser = argparse.ArgumentParser(description='face anto-spoofing')
+    
+    parser.add_argument('--batchsize', default=4, type=int, help='batch size')
+    parser.add_argument('--workers', default=4, type=int, help='number of workers')
+    parser.add_argument('--epochs', default=100, type=int, help='train epochs')        
+    parser.add_argument('--trainratio', default=1.0, type=float, help='ratio to divide train dataset')                               
+    parser.add_argument('--lr', default=1e-3, type=float, help='learning rate(default: 0.001)')
+    parser.add_argument('--skf', default=0, type=int, help='stratified k-fold')
+    
+    parser.add_argument('--attacktype', default='prm', type=str, help='Kinds of Presentation Attacks: r, p, m, prm')
+    parser.add_argument('--dataset', default=12, type=int, help='dataset type: 12 or 15')
+    parser.add_argument('--model', default='', type=str, help='rgb, rgbd, rgbp, rgbdp')   
+    parser.add_argument('--inputchannel', default=3, type=int, help='inputchannel')
+    
     parser.add_argument('--ae-path', default='', type=str, help='Pretrained AutoEncoder path')
     parser.add_argument('--save-path', default='../bc_output/logs/Train/', type=str, help='train logs path')
     parser.add_argument('--save-path-valid', default='', type=str, help='valid logs path')
     parser.add_argument('--save-path-test', default='../bc_output/logs/Test/', type=str, help='test logs path')
-    parser.add_argument('--model', default='', type=str, help='rgb, depth, ae')                                         
-    parser.add_argument('--checkpoint-path', default='', type=str, help='checkpoint path')
-    parser.add_argument('--message', default='', type=str, help='pretrained model checkpoint')                     
-    parser.add_argument('--epochs', default=300, type=int, help='train epochs')                                    
-    parser.add_argument('--lowdata', default=True, type=booltype, help='whether low data is included')
-    parser.add_argument('--hist-stretch', default=False, type=booltype, help='histogram stretching')
-    parser.add_argument('--dataset', default=1, type=int, help='data set type(defaulct: 1, which means including etc)')
-    parser.add_argument('--loss', default=0, type=int, help='0: mse, 1:rapp')
-    parser.add_argument('--gr', default=0.0, type=float, help='gaussian rate(default: 0.01)')
-    parser.add_argument('--dr', default=0.5, type=float, help='dropout rate(default: 0.1)')
-    parser.add_argument('--batchnorm', default=False, type=booltype, help='batch normalization(default: False)')
-    parser.add_argument('--lamda', default=0, type=float, help='rate of center loss (default: 0)')
-    parser.add_argument('--lr', default=1e-3, type=float, help='learning rate(default: 0.001)')
-    parser.add_argument('--skf', default=0, type=int, help='stratified k-fold')
+    parser.add_argument('--model-path', default='', type=str, help='model parameter path')
+    parser.add_argument('--message', default='', type=str, help='parameter file name')                     
+
     parser.add_argument('--seed', default=1, type=int, help='Seed for random number generator')
     parser.add_argument('--cuda', default=0, type=int, help='gpu number')                                         
     parser.add_argument('--device', default='', type=str, help='device when cuda is available')
-    parser.add_argument('--inputdata-channel', default=3, type=int, help='rgb=3, depth=4, ae=8')
-    parser.add_argument('--rgb-norm', default='nothing', type=str, help='This should be std or minmax or nothing')
-    parser.add_argument('--depth-norm', default='nothing', type=str, help='This should be std or minmax or nothing')
+                                                  
     args = parser.parse_args()
 
-    # 중요 옵션 체크 및 model type 배정 
-    if args.model == "rgb":
-        args.inputdata_channel = 3
-    elif args.model == "rgb-ae":
-        args.inputdata_channel = 3
-    elif args.model == "rgbdepth":
-        args.inputdata_channel = 4
-    elif args.model == "rgbdepth-ae":
-        args.inputdata_channel = 4
-    elif args.model == "rgbpc":
-        args.inputdata_channel = 6   
-    elif args.model == "all": # RGB(ae), Depth, PointCloud
-        args.inputdata_channel = 7
+    if args.model == 'rgb':
+        args.inputchannel = 3
+    elif args.model == 'rgbd':
+        args.inputchannel = 4
+    elif args.model == 'rgbp':
+        args.inputchannel = 6
+    elif args.model == 'rgbdp':
+        args.inputchannel = 7
     else:
-        print("You need to checkout option 'model' [rgb, depth, ae]")
+        print("You need to checkout option 'model' [rgb, rgbd, rgbp, rgbpc]")
         sys.exit(0)
-
+        
     # 결과 파일 path 설정 
     time_string = time.strftime('%Y-%m-%d_%I:%M_%p', time.localtime(time.time()))
     args.save_path = args.save_path + f'{args.message}' + '_' + f'{time_string}'
@@ -385,9 +269,9 @@ if __name__ == "__main__":
         os.makedirs(args.save_path_test)
     
     # weight 파일 path
-    args.checkpoint_path = f'/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_output/checkpoint/{args.message}'
-    if not os.path.exists(args.checkpoint_path): 
-        os.makedirs(args.checkpoint_path)
+    args.model_path = f'/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_output/checkpoint/{args.message}'
+    if not os.path.exists(args.model_path): 
+        os.makedirs(args.model_path)
 
     # cuda 관련 코드
     use_cuda = True if torch.cuda.is_available() else False
@@ -415,7 +299,7 @@ if __name__ == "__main__":
     # RGB, Depth
     # args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_Both_3_dr01_gr0/epoch_90_model.pth"
     # RGB 
-    args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_RGB_3_dr0_gr001/epoch_10_model.pth"
+    # args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_RGB_3_dr0_gr001/epoch_10_model.pth"
 
     # Pretrained 된 AutoEncoder 생성 (layer3)
     # global autoencoder
@@ -423,20 +307,12 @@ if __name__ == "__main__":
     # ### autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
     # autoencoder.load_state_dict(torch.load(args.ae_path))
     # autoencoder.eval()
-    
-    # data loader
-    dataloader_start = time.time()
-    train_loader, test_loader = Facedata_Loader(train_size=64, test_size=64, use_lowdata=args.lowdata, dataset=args.dataset, rgb_norm=args.rgb_norm, depth_norm=args.depth_norm, histogram_stretching=args.hist_stretch)
+
+    train_loader, test_loader = Facedata_Loader(batch_size=4, num_workers=4, attack_type=args.attacktype, dataset_type=args.dataset, traindata_ratio=args.trainratio)
     
     # train 코드
     train_start = time.time()
-    train(args, train_loader, test_loader)
-    train_end = time.time()
+    train_time = train(args, train_loader, test_loader)
 
-    option_time = str(timedelta(seconds=dataloader_start-option_start)).split(".")
-    dataloader_time = str(timedelta(seconds=train_start-dataloader_start)).split(".")
-    train_time = str(timedelta(seconds=train_end-train_start)).split(".")
-    
-    logger.Print(f"Opt Execute: {option_time}")  
-    logger.Print(f"Data Loader: {dataloader_time}")  
-    logger.Print(f"Train Execute: {train_time}")  
+    train_time = str(timedelta(seconds=time.time()-train_start)).split(".")
+    logger.Print(f"Train Execution Time: {train_time}")  

@@ -1,411 +1,189 @@
+import os
+import os.path as osp
+import random
 
+import cv2
+import numpy as np
+import pandas as pd 
+import matplotlib.pyplot as plt
+from sklearn.metrics import f1_score,accuracy_score, confusion_matrix, classification_report
+import seaborn as sns
+
+import torch
 from torch.utils.data import Dataset,DataLoader
-from torchvision import transforms 
+from torchvision import transforms as T 
+
 from torch.utils.data.sampler import SubsetRandomSampler, RandomSampler
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from PIL import Image
-import os
-import cv2
-import torch
-import numpy as np
-from plyfile import PlyData
-import pandas as pd 
+
 
 class Face_Data(Dataset):
 
-    def __init__(self, metadata_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_code/metadata/', 
-                        data_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/' , data_txt = '', transform=None, rgb_norm='nothing', depth_norm='nothing', histogram_stretching=False):
-            self.metadata_root = metadata_root
-            self.data_root = data_root
-            self.transform = transform
-            self.rgb_paths = []
-            self.depth_paths = []
-            self.pointcloud_paths = []
-            self.labels = []
-            self.rgb_norm = rgb_norm
-            self.depth_norm = depth_norm
-            self.histogram_stretching = histogram_stretching
-            self.croped_height = 112
-            self.croped_width = 112
-
-            lines_in_txt = open(os.path.join(metadata_root, data_txt),'r')
-            for line in lines_in_txt:
-                line = line.rstrip() 
-                split_str = line.split()
-
-                rgb_path = os.path.join(data_root, split_str[0])
-                depth_path = os.path.join(data_root, split_str[1])
-                pointcloud_path = os.path.join(data_root, split_str[2])
-                label = split_str[3] 
-                
-                self.rgb_paths.append(rgb_path)
-                self.depth_paths.append(depth_path)
-                self.pointcloud_paths.append(pointcloud_path)
-                self.labels.append(label)
+    def __init__(self, data_paths):
+        self.data_paths = data_paths
+        
+        normalize = T.Normalize(mean=[0.485, 0.456, 0.406],std = [0.229, 0.224, 0.225])
+        self.transforms = T.Compose([
+            T.ToTensor(),
+            normalize
+        ])        
+            
 
     def __getitem__(self, index):
-        rgb_path = self.rgb_paths[index]
-        depth_path = self.depth_paths[index]
-        pointcloud_path = self.pointcloud_paths[index]
-        label = int(self.labels[index])
- 
-        size_transformer = transforms.Compose([
-            transforms.Resize((128,128)),
-            transforms.CenterCrop((self.croped_height, self.croped_width))
-        ])   
-
-        ############ RGB open 
-        rgb_image = Image.open(rgb_path).convert('RGB')
+        rgb_path = self.data_paths[index][0]
+        cloud_path = self.data_paths[index][1]
         
-        # Hisgoram Stetching 할 경우 
-        if self.histogram_stretching == True:
-            rgb_image = histogram_stretching(rgb_image)
-            
-        # 다양한 정규화 조합 적용 
-        if self.rgb_norm == 'nothing':
-            rgb_numpy = np.array(rgb_image)
-            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
-            
-        elif self.rgb_norm == 'std':
-            # swaped_rgb_np = np.array(rgb_image).swapaxes(0,2)
-            # rgb_array[0] = StandardScaler().fit_transform(swaped_rgb_np[0])
-            # rgb_array[1] = StandardScaler().fit_transform(swaped_rgb_np[1])
-            # rgb_array[2] = StandardScaler().fit_transform(swaped_rgb_np[2])
-            # shapeback_rgb_np = rgb_array.swapaxes(0,2)
-            # # rgb_tensor = torch.from_numpy(shapeback_rgb_np)
-            # rgb_image = Image.fromarray(shapeback_rgb_np.astype(np.uint8))   
-            
-            # rgb numpy를 tensor로 바꾸고 (H,W,C) -> (C,H,W) 로 변경  
-            rgb_numpy = np.array(rgb_image)
-            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
-            
-            # 표준화 수행
-            rgb_numpy = rgb_tensor.numpy() 
-             
-            rgb_numpy[0] = StandardScaler().fit_transform(rgb_numpy[0])
-            rgb_numpy[1] = StandardScaler().fit_transform(rgb_numpy[1])
-            rgb_numpy[2] = StandardScaler().fit_transform(rgb_numpy[2])
-            
-            rgb_tensor = torch.from_numpy(rgb_numpy)
-            
-        elif self.rgb_norm == 'minmax':           
-            minmax_transformer = transforms.Compose([
-                transforms.ToTensor()
-            ])   
-            rgb_tensor = minmax_transformer(rgb_image) 
-            
-        elif self.rgb_norm == 'stdminmax':
-            
-            # rgb numpy를 tensor로 바꾸고 (H,W,C) -> (C,H,W) 로 변경  
-            rgb_numpy = np.array(rgb_image)            
-            rgb_tensor = torch.from_numpy(rgb_numpy).permute(2,0,1)
-            
-            # 표준화 수행
-            rgb_numpy = rgb_tensor.numpy() 
+        # crop setting
+        crop_width = 90
+        crop_height = 140
+        mid_x, mid_y = 90, 90
+        offset_x, offset_y = crop_width//2, crop_height//2
         
-            rgb_numpy[0] = StandardScaler().fit_transform(rgb_numpy[0])
-            rgb_numpy[1] = StandardScaler().fit_transform(rgb_numpy[1])
-            rgb_numpy[2] = StandardScaler().fit_transform(rgb_numpy[2])
-            
-            # minmax 수행 
-            rgb_numpy[0] = MinMaxScaler().fit_transform(rgb_numpy[0])
-            rgb_numpy[1] = MinMaxScaler().fit_transform(rgb_numpy[1])
-            rgb_numpy[2] = MinMaxScaler().fit_transform(rgb_numpy[2])
-            
-            # 텐서로 변경 (permute 필요없음)
-            rgb_tensor = torch.from_numpy(rgb_numpy)
-   
-        elif self.rgb_norm == 'minmaxstd':            
-            minmaxstd_transformer = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize([0,0,0], [1,1,1])
-            ])   
-            rgb_tensor = minmaxstd_transformer(rgb_image)   
- 
-         # 이미지 크기 조정 
-        rgb_tensor = size_transformer(rgb_tensor)
-           
-        ############ Depth open
-        depth_image = Image.open(depth_path).convert('L')
-
-        # 다양한 정규화 조합 적용 
-        if self.depth_norm == 'nothing':
-            
-            # depth numpy를 (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경((H,W,C) -> (C,H,W) 도 변경)  
-            depth_numpy = np.array(depth_image)[:, :, np.newaxis]
-            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
-
-        elif self.depth_norm == 'std':
-                        
-            # depth numpy 표준화 수행 
-            depth_numpy = np.array(depth_image)
-            depth_numpy = StandardScaler().fit_transform(depth_numpy)
-            
-            # (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경 (shapeh도 (H,W,C) -> (C,H,W) 도 변경)  
-            depth_numpy = depth_numpy[:, :, np.newaxis]
-            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
-            
-        elif self.depth_norm == 'minmax':   
-            minmax_transformer = transforms.Compose([
-                transforms.ToTensor()
-            ])   
-            depth_tensor = minmax_transformer(depth_image)                     
-            
-        elif self.depth_norm == 'stdminmax':
-            
-            # depth numpy 표준화, MinMax 정규화 수행 
-            depth_numpy = np.array(depth_image)
-            depth_numpy = StandardScaler().fit_transform(depth_numpy)
-            depth_numpy = MinMaxScaler().fit_transform(depth_numpy)
-            
-            # (H,W) -> (H,W,C) 로 바꾸고, tensor로 변경 (shapeh도 (H,W,C) -> (C,H,W) 도 변경)  
-            depth_numpy = depth_numpy[:, :, np.newaxis]
-            depth_tensor = torch.from_numpy(depth_numpy).permute(2,0,1)
-   
-        elif self.depth_norm == 'minmaxstd':            
-            minmaxstd_transformer = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize([0], [1])
-            ])   
-            depth_tensor = minmaxstd_transformer(depth_image)   
-            
-         # 이미지 크기 조정 
-        depth_tensor = size_transformer(depth_tensor)
+        # RGB open and crop 
+        rgb_data = cv2.imread(rgb_path)
+        rgb_data = cv2.cvtColor(rgb_data, cv2.COLOR_BGR2RGB)
+        rgb_data = cv2.resize(rgb_data, (180,180), interpolation=cv2.INTER_CUBIC)
+        rgb_data = rgb_data[mid_y-offset_y:mid_y+offset_y, mid_x-offset_x:mid_x+offset_x]     
         
-        ############ Point Cloud(PLY) open 
-        plydata = PlyData.read(pointcloud_path)
-        ply_pd = pd.DataFrame({key_: plydata['vertex'][key_] for key_ in ['x', 'y', 'z', 'red', 'green', 'blue', 'cx', 'cy', 'depth', 'alpha']})
-        
-        # cx, cy 
-        list_width = plydata['vertex']['cx']
-        list_height = plydata['vertex']['cy']
-        
-        # Point Cloud 정규화 적용 
-        if self.depth_norm == 'nothing':
-            list_x = plydata['vertex']['x']
-            list_y = plydata['vertex']['y']
-            list_z = plydata['vertex']['z']
-            list_depth = plydata['vertex']['depth']
+        if self.transforms is not None :
+            rgb_data = self.transforms(rgb_data)
             
-        elif self.depth_norm == 'std':
-            standard_result = StandardScaler().fit_transform(ply_pd)
-            standard_pd = pd.DataFrame(standard_result)
-            standard_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
-
-            list_x = standard_pd['x']
-            list_y = standard_pd['y']
-            list_z = standard_pd['z']
-            list_depth = standard_pd['depth']
-            
-        elif self.depth_norm == 'minmax':   
-            minmax_result = MinMaxScaler().fit_transform(ply_pd)
-            minmax_pd = pd.DataFrame(minmax_result)
-            minmax_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
-
-            list_x = minmax_pd['x']
-            list_y = minmax_pd['y']
-            list_z = minmax_pd['z']
-            list_depth = minmax_pd['depth']
-            
-        elif self.depth_norm == 'stdminmax':
-            standard_result = StandardScaler().fit_transform(ply_pd)
-            minmax_result = MinMaxScaler().fit_transform(standard_result)
-            stdminmax_pd = pd.DataFrame(minmax_result)
-            stdminmax_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
-
-            list_x = stdminmax_pd['x']
-            list_y = stdminmax_pd['y']
-            list_z = stdminmax_pd['z']
-            list_depth = stdminmax_pd['depth']
-   
-        elif self.depth_norm == 'minmaxstd':      
-            minmax_result = MinMaxScaler().fit_transform(ply_pd)
-            standard_result = StandardScaler().fit_transform(minmax_result)
-            minmaxstd_pd = pd.DataFrame(standard_result)
-            minmaxstd_pd.columns = ["x","y","z","red","blue","green","cx","cy","depth","alpha"]
-
-            list_x = minmaxstd_pd['x']
-            list_y = minmaxstd_pd['y']
-            list_z = minmaxstd_pd['z']
-            list_depth = minmaxstd_pd['depth']
-    
-        # (C, H, W) 인 Point Cloud Array 에 저장
-        pointcloud_array = np.zeros((3, 192, 256)) 
-
-        for idx in range(49151):
-            pointcloud_array[0][int(list_height[idx])][int(list_width[idx])] = list_x[idx]  # [c, h, w]  그리고 h = cy, w = cx
-            pointcloud_array[1][int(list_height[idx])][int(list_width[idx])] = list_y[idx]
-            pointcloud_array[2][int(list_height[idx])][int(list_width[idx])] = list_z[idx]
-            # depth_array[0][int(list_height[idx])][int(list_width[idx])] = list_depth[idx]
-
-        # Tensor로 변경 후 이미지 크기 조정 
-        pointcloud_tensor = torch.from_numpy(pointcloud_array)
-        pointcloud_tensor = size_transformer(pointcloud_tensor)   
-    
-        # label 텐서화 
-        label_tensor = torch.as_tensor(label)
+        # Point Cloud(192, 256, 3) open and crop 
+        cloud_data = np.load(cloud_path)
+        cloud_data = cv2.resize(cloud_data, (180,180), interpolation=cv2.INTER_CUBIC)
+        cloud_data += 5
+        cloud_data = cloud_data[mid_y-offset_y:mid_y+offset_y, mid_x-offset_x:mid_x+offset_x]
         
-        return rgb_tensor, depth_tensor, pointcloud_tensor, label_tensor
-
+        # Point Cloud and Depth Scaling
+        shift_value = 0
+        xcoor = np.array(cloud_data[:, :, 0] + shift_value)
+        ycoor = np.array(cloud_data[:, :, 1] + shift_value)
+        zcoor = np.array(cloud_data[:, :, 2] + shift_value)
+        depth = np.array(cloud_data[:, :, 3] + shift_value)
+        
+        xcoor = (xcoor-xcoor.mean())/xcoor.std()
+        ycoor = (ycoor-ycoor.mean())/ycoor.std()
+        zcoor = (zcoor-zcoor.mean())/zcoor.std()
+        depth = (depth-depth.mean())/depth.std()     
+        
+        scaled_cloud_data = np.concatenate([xcoor[np.newaxis,:],ycoor[np.newaxis,:],zcoor[np.newaxis,:]]) 
+        scaled_depth_data = depth[np.newaxis,:]
+        
+  
+        # label - { 0 : real , 1 : mask }
+        if 'bonafide' in rgb_path :
+            label = 0
+        elif 'attack_mask' in rgb_path :
+            label = 1
+        elif 'attack_replay' in rgb_path :
+            label = 1
+        elif 'attack_paper' in rgb_path :
+            label = 1
+        return rgb_data, scaled_cloud_data, scaled_depth_data, label
+        
     def __len__(self):
-        return len(self.rgb_paths)
+        return len(self.data_paths)
         
-def Facedata_Loader(train_size=64, test_size=64, use_lowdata=True, dataset=0, rgb_norm='nothing', depth_norm='nothing', histogram_stretching=False): 
+def Facedata_Loader(batch_size=4, num_workers=4, attack_type="", dataset_type=12, traindata_ratio=1): 
     
-    # dataset 종류, use_lowdata 여부 상관 없음 ! 
-    print("**** LDFAS Datset is using.")
-    train_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/train_data.txt', rgb_norm=rgb_norm, depth_norm=depth_norm, histogram_stretching=histogram_stretching)
-    test_data=Face_Data(data_txt='MakeTextFileCode_RGB_Depth_PointCloud/test_data.txt', rgb_norm=rgb_norm, depth_norm=depth_norm, histogram_stretching=histogram_stretching) 
+    ## Input : RGB(3-channel) + Depth(1-channel) + Point_Cloud(3-channel)
+     
+    data_path = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/LDFAS'
+    npy_path = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/LDFAS/NPY_Files'
 
-    train_loader = DataLoader(dataset=train_data, batch_size=train_size, shuffle=True, num_workers=8)
-    test_loader = DataLoader(dataset=test_data, batch_size=test_size, shuffle=True, num_workers=8)
+    # person_number = [int(i) for i in os.listdir(data_path) if i.isdigit()]
+    if dataset_type == 12:
+        # 1~12 dataset 
+        print("dataset_12 is used")
+        person_number = [i for i in range(1,10)] # 1~9
+        test_number = [i for i in range(10,13)]  # 10~12
+    elif dataset_type == 15:
+        # 1~15 dataset
+        print("dataset_15 is used")
+        person_number = [i for i in range(1,13)] # 1~12
+        test_number = [i for i in range(13,16)]  # 13~15
+
+    traindata_portion = traindata_ratio
+
+    train_img_paths, test_img_paths = [],[]
+    for i in person_number :
+        img_path = osp.join(data_path,str(i),'bonafide')
+        files = os.listdir(img_path)
+        files = [j for j in files if (j.split('.')[-1]=='jpg') and (j.split('_')[0]=='rgb')]
+        random.shuffle(files)
+        
+        bonafide_files = [osp.join(data_path,str(i),'bonafide',j) for j in files]
+        paper_files= [osp.join(data_path,str(i),'attack_paper',j) for j in files]
+        replay_files= [osp.join(data_path,str(i),'attack_replay',j) for j in files]
+        mask_files= [osp.join(data_path,str(i),'attack_mask',j) for j in files]
+        
+
+        bonafide_cloud_files = [osp.join(npy_path, 'real_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in bonafide_files]
+        paper_cloud_files = [osp.join(npy_path, 'paper_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in paper_files]
+        replay_cloud_files = [osp.join(npy_path, 'replay_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in replay_files]
+        mask_cloud_files = [osp.join(npy_path, 'mask_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in mask_files]
+        
+        # bonafide
+        train_img_paths += list(zip(bonafide_files,bonafide_cloud_files))[:int(len(bonafide_files)*traindata_portion)]
+        test_img_paths += list(zip(bonafide_files,bonafide_cloud_files))[int(len(bonafide_files)*traindata_portion):]
+        
+        # PAs
+        if "p" in attack_type:
+            train_img_paths += list(zip(paper_files,paper_cloud_files))[:int(len(paper_files)*traindata_portion)]
+            test_img_paths += list(zip(paper_files,paper_cloud_files))[int(len(paper_files)*traindata_portion):]
+        if "r" in attack_type:
+            train_img_paths += list(zip(replay_files,replay_cloud_files))[:int(len(replay_files)*traindata_portion)]
+            test_img_paths += list(zip(replay_files,replay_cloud_files))[int(len(replay_files)*traindata_portion):]
+        if "m" in attack_type:
+            train_img_paths += list(zip(mask_files,mask_cloud_files))[:int(len(mask_files)*traindata_portion)]
+            test_img_paths += list(zip(mask_files,mask_cloud_files))[int(len(mask_files)*traindata_portion):]
+        
+    for i in test_number :
+        img_path = osp.join(data_path,str(i),'bonafide')
+        files = os.listdir(img_path)
+        files = [j for j in files if (j.split('.')[-1]=='jpg') and (j.split('_')[0]=='rgb')]
+        random.shuffle(files)
+    
+        bonafide_files = [osp.join(data_path,str(i),'bonafide',j) for j in files]
+        paper_files= [osp.join(data_path,str(i),'attack_paper',j) for j in files]
+        replay_files= [osp.join(data_path,str(i),'attack_replay',j) for j in files]
+        mask_files= [osp.join(data_path,str(i),'attack_mask',j) for j in files]
+        
+        
+        bonafide_cloud_files = [osp.join(npy_path,'real_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in bonafide_files]
+        paper_cloud_files = [osp.join(npy_path,'paper_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in paper_files]
+        replay_cloud_files = [osp.join(npy_path,'replay_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in replay_files]
+        mask_cloud_files = [osp.join(npy_path,'mask_cloud_data',j.split('/')[-3], 
+                                (('pc_'+j.split('/')[-1].split('_')[-1]).split('.')[0]+'.npy')) for j in mask_files]
+
+        # bonafide
+        test_img_paths += list(zip(bonafide_files, bonafide_cloud_files))[:]
+
+        # PAs
+        if "p" in attack_type:
+            test_img_paths += list(zip(paper_files, paper_cloud_files))[:]
+        if "r" in attack_type:
+            test_img_paths += list(zip(replay_files, replay_cloud_files))[:]
+        if "m" in attack_type:
+            test_img_paths += list(zip(mask_files, mask_cloud_files))[:]
+        
+    random.shuffle(train_img_paths)
+    random.shuffle(test_img_paths)
+
+    print(len(train_img_paths))
+    print(len(test_img_paths))
+    
+    train_dataset=Face_Data(train_img_paths)
+    test_dataset=Face_Data(test_img_paths) 
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
     return train_loader, test_loader
-
-# class Face_Data(Dataset):
-
-#     def __init__(self, metadata_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_code/metadata/', 
-#                         data_root = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/data/' , datatxt = '', transform=None, histogram_stretching=False):
-#             self.metadata_root = metadata_root
-#             self.data_root = data_root
-#             self.transform = transform
-#             self.rgb_paths = []
-#             self.depth_paths = []
-#             self.labels = []
-#             self.histogram_stretching = histogram_stretching
-
-#             print(f"histogram stretching:{histogram_stretching}")
-
-#             lines_in_txt = open(os.path.join(metadata_root, datatxt),'r')
-
-#             for line in lines_in_txt:
-#                 line = line.rstrip() 
-#                 split_str = line.split()
-
-#                 rgb_path = os.path.join(data_root, split_str[0])
-#                 depth_path = os.path.join(data_root, split_str[1])
-#                 label = split_str[2] 
-#                 self.rgb_paths.append(rgb_path)
-#                 self.depth_paths.append(depth_path)
-#                 self.labels.append(label)
-
-#     def __getitem__(self, index):
-#         rgb_path = self.rgb_paths[index]
-#         depth_path = self.depth_paths[index]
-
-#         rgb_image = Image.open(rgb_path).convert('RGB')
-#         depth_image = Image.open(depth_path).convert('L')
-
-#         # Hisgoram Stetching 할 경우 
-#         if self.histogram_stretching == True:
-#             rgb_image = histogram_stretching(rgb_image)
-
-#         transform_RGB = transforms.Compose([
-#             transforms.Resize((128,128)),
-#             transforms.ToTensor(),
-#             transforms.Normalize(mean=[0,0,0], std=[1,1,1])
-#         ])
-
-#         transform_Depth = transforms.Compose([
-#             transforms.Resize((128,128)),
-#             transforms.ToTensor(),
-#             transforms.Normalize(mean=[0], std=[1])
-#         ])
-
-#         rgb_image = transform_RGB(rgb_image)
-#         depth_image = transform_Depth(depth_image)
-
-#         label = torch.as_tensor(int(self.labels[index]))
-        
-#         return rgb_image, depth_image, label
-
-#     def __len__(self):
-#         return len(self.rgb_paths)
-        
-# def Facedata_Loader(train_size=64, test_size=64, use_lowdata=True, dataset=0, histogram_stretching=False): 
-    
-#     # 기존 데이터 (trian셋은 동일)
-#     if dataset == 0 : 
-#         print("***** Data set's type is 0 (original).")
-#         if use_lowdata:
-#             train_data=Face_Data(datatxt='MakeTextFileCode_RGB_Depth/train_data_list.txt', histogram_stretching=histogram_stretching)
-#             test_data=Face_Data(datatxt='MakeTextFileCode_RGB_Depth/test_data_list.txt', histogram_stretching=histogram_stretching) 
-#             print("***** Low data is included to data set.")
-#         else:
-#             train_data=Face_Data(datatxt="MakeTextFileCode_RGB_Depth/train_data_list_wo_low.txt", histogram_stretching=histogram_stretching)
-#             test_data=Face_Data(datatxt="MakeTextFileCode_RGB_Depth/test_data_list_wo_low.txt", histogram_stretching=histogram_stretching)
-#             print("***** Low data is not included to data set.")
-
-#     # 추가된 데이터(trian셋은 동일)
-#     elif dataset == 1:
-#         print("***** Data set's type is 1 (added otherthings).")
-#         if use_lowdata:
-#             train_data=Face_Data(datatxt='MakeTextFileCode_RGB_Depth/train_data_list_w_etc.txt', histogram_stretching=histogram_stretching)
-#             test_data=Face_Data(datatxt='MakeTextFileCode_RGB_Depth/test_data_list_w_etc.txt', histogram_stretching=histogram_stretching) 
-#             print("***** Low data is included to data set")
-#         else:
-#             train_data=Face_Data(datatxt="MakeTextFileCode_RGB_Depth/train_data_list_w_etc_wo_low.txt", histogram_stretching=histogram_stretching)
-#             test_data=Face_Data(datatxt="MakeTextFileCode_RGB_Depth/test_data_list_w_etc_wo_low.txt", histogram_stretching=histogram_stretching)  
-#             print("***** Low data is not included to data set")
-
-#     train_loader = DataLoader(dataset=train_data, batch_size=train_size, shuffle=True, num_workers=8)
-#     test_loader = DataLoader(dataset=test_data, batch_size=test_size, shuffle=True, num_workers=8)
-
-#     return train_loader, test_loader
-
-
-# 10, 200  ->
-# 50, 150  -> _1
-# 80, 110  -> _2
-# 60, 140  -> _3
-
-minValue = 60
-maxValue = 140
-
-def normalizeRed(intensity):
-
-    iI      = intensity
-    minI    = minValue # 86 
-    maxI    = maxValue #230
-    minO    = 0
-    maxO    = 255
-
-    iO      = (iI-minI)*(((maxO-minO)/(maxI-minI))+minO)
-    return iO
-
-def normalizeGreen(intensity):
-
-    iI      = intensity
-    minI    = minValue # 90
-    maxI    = maxValue #225
-    minO    = 0
-    maxO    = 255
-
-    iO      = (iI-minI)*(((maxO-minO)/(maxI-minI))+minO)
-    return iO
-
-def normalizeBlue(intensity):
-
-    iI      = intensity
-    minI    = minValue # 100
-    maxI    = maxValue # 210
-    minO    = 0
-    maxO    = 255
-
-    iO      = (iI-minI)*(((maxO-minO)/(maxI-minI))+minO)
-    return iO
-
-# imageObject is PIL 
-def histogram_stretching(imageObject):
-    # Split the red, green and blue bands from the Image
-    multiBands      = imageObject.split()
-
-    # Apply point operations that does contrast stretching on each color band
-    normalizedRedBand      = multiBands[0].point(normalizeRed)
-    normalizedGreenBand    = multiBands[1].point(normalizeGreen)
-    normalizedBlueBand     = multiBands[2].point(normalizeBlue)
-
-    # Create a new image from the contrast stretched red, green and blue brands
-    normalizedImage = Image.merge("RGB", (normalizedRedBand, normalizedGreenBand, normalizedBlueBand))
-    
-    return normalizedImage
