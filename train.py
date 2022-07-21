@@ -116,7 +116,9 @@ def train(args, train_loader, test_loader):
             train_bar.set_description("[Train] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(train_loader),
                                                         round(loss.item(),5),round(np.array(train_loss).mean(),5)
                                                                 ))
-            
+        
+        logger.Print("[Train] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(train_loader),
+                                                        round(loss.item(),5),round(np.array(train_loss).mean(),5)))    
         train_acc = accuracy_score(np.array(train_labels), np.round(train_probs))
         train_f1 = f1_score(np.array(train_labels), np.round(train_probs), average='macro')
         logger.Print(f'Train Accuracy : {train_acc:.4f}')
@@ -166,6 +168,8 @@ def train(args, train_loader, test_loader):
             test_bar.set_description("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(test_loader),
                                                         round(loss.item(),5),round(np.array(test_loss).mean(),5)
                                                                 ))
+        logger.Print("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(test_loader),
+                                                        round(loss.item(),5),round(np.array(test_loss).mean(),5)))
         test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
         test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
         logger.Print(f'Test Accuracy : {test_acc:.4f}')
@@ -205,11 +209,10 @@ def train(args, train_loader, test_loader):
     logger.Print(f'  > Train Best F1-Score : {np.array(train_performs["F1"]).max():.4f}')
     logger.Print(f'  > Test Best Accuracy : {np.array(test_performs["ACC"]).max():.4f}')
     logger.Print(f'  > Test Best F1-Score : {np.array(test_performs["F1"]).max():.4f}')
-    logger.Print(f'  > Test Epoch (Best F1-Score):{best_test_epoch+1} / index(epoch-1): {index}')
+    logger.Print(f'  > Test Epoch (Best F1-Score): {best_test_epoch+1}({index})')
     logger.Print(f'  > Test Best CF') 
     logger.Print(f'  > {np.array(test_performs["Info"][index])}')
     logger.Print(f'')
-    
     
     return datetime.now() - start_time
 

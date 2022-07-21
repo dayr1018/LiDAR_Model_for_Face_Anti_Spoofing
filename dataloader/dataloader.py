@@ -4,18 +4,8 @@ import random
 
 import cv2
 import numpy as np
-import pandas as pd 
-import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score,accuracy_score, confusion_matrix, classification_report
-import seaborn as sns
-
-import torch
 from torch.utils.data import Dataset,DataLoader
 from torchvision import transforms as T 
-
-from torch.utils.data.sampler import SubsetRandomSampler, RandomSampler
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-
 
 class Face_Data(Dataset):
 
@@ -27,7 +17,6 @@ class Face_Data(Dataset):
             T.ToTensor(),
             normalize
         ])        
-            
 
     def __getitem__(self, index):
         rgb_path = self.data_paths[index][0]
@@ -35,7 +24,7 @@ class Face_Data(Dataset):
         
         # crop setting
         crop_width = 90
-        crop_height = 140
+        crop_height = 150
         mid_x, mid_y = 90, 90
         offset_x, offset_y = crop_width//2, crop_height//2
         
@@ -69,7 +58,6 @@ class Face_Data(Dataset):
         scaled_cloud_data = np.concatenate([xcoor[np.newaxis,:],ycoor[np.newaxis,:],zcoor[np.newaxis,:]]) 
         scaled_depth_data = depth[np.newaxis,:]
         
-  
         # label - { 0 : real , 1 : mask }
         if 'bonafide' in rgb_path :
             label = 0
@@ -100,9 +88,21 @@ def Facedata_Loader(batch_size=4, num_workers=4, attack_type="", dataset_type=12
     elif dataset_type == 15:
         # 1~15 dataset
         print("dataset_15 is used")
-        person_number = [i for i in range(1,13)] # 1~12
-        test_number = [i for i in range(13,16)]  # 13~15
+        person_number = [i for i in range(1,16)] # 1~15   => 0.8 setthing
+        test_number = [i for i in range(0)]  # 0 
+    elif dataset_type == 151:
+        # 1~15 dataset
+        print("dataset_151 is used")
+        person_number = [i for i in range(1,13)] # 1~12    => 1.0 setting 
+        test_number = [i for i in range(13,16)]  # 13~15 
 
+    elif dataset_type == 152:
+            # 1~15 dataset
+        print("dataset_152 is used")
+        person_number = [i for i in range(1,11)] # 1~10   => 1.0 settting 
+        test_number = [i for i in range(11,16)]  # 11~15 
+        
+          
     traindata_portion = traindata_ratio
 
     train_img_paths, test_img_paths = [],[]
