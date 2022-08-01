@@ -23,12 +23,13 @@ import torch.nn.functional as f
 from torch.optim import lr_scheduler
 from torchinfo import summary
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader
 
 from models.AutoEncoder import AutoEncoder_RGB, AutoEncoder_Depth
 from models.AutoEncoder import AutoEncoder_Intergrated_Basic, AutoEncoder_Intergrated_Proposed
 from models.Network import Face_Detection_Model
-from dataloader.dataloader import Facedata_Loader
-from utility import plot_roc_curve, cal_metrics, cal_metrics2
+from dataloader.dataloader import load_dataset, load_test_dataset
+from utility import draw_train_and_test_loss, draw_accuracy_and_f1_during_training
 from loger import Logger
 
 def booltype(str):
@@ -41,7 +42,7 @@ def booltype(str):
     else:
         raise argparse.ArgumentError("Boolean value expected")
 
-def model_save(model,epoch,optimizer,train_loss,val_loss,train_f1,valid_f1,path) :
+def model_save(model, epoch, optimizer, train_loss, val_loss, train_f1, valid_f1, path) :
     torch.save({
                 'model_state_dict': model.state_dict(),
                 'epoch': epoch,
@@ -51,7 +52,7 @@ def model_save(model,epoch,optimizer,train_loss,val_loss,train_f1,valid_f1,path)
                 'train_f1' : train_f1,
                 'val_f1' : valid_f1
                 }, path)
-    print('Model Save ! > ',path)
+    print('Model Save ! > ', path)
 
 def train(args, train_loader, test_loader):
 
@@ -72,14 +73,14 @@ def train(args, train_loader, test_loader):
         
     # Train 
     train_performs, test_performs = {'ACC':[],'F1':[]},{'ACC':[],'F1':[], 'Info':[]}
-    best_test_f1 = 0
-    best_test_epoch = 0
+
+    total_train_loss = []
+    total_test_loss = []
     start_epoch = 0
     epochs = args.epochs
     sigmoid = nn.Sigmoid()
     loss_fn = nn.BCEWithLogitsLoss()
 
-    start_time = datetime.now()
     for epoch in range(start_epoch, epochs) :
         model.train()
         train_loss = []
@@ -119,6 +120,7 @@ def train(args, train_loader, test_loader):
         
         logger.Print("[Train] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(train_loader),
                                                         round(loss.item(),5),round(np.array(train_loss).mean(),5)))    
+        total_train_loss.append(round(np.array(train_loss).mean(),5))
         train_acc = accuracy_score(np.array(train_labels), np.round(train_probs))
         train_f1 = f1_score(np.array(train_labels), np.round(train_probs), average='macro')
         logger.Print(f'Train Accuracy : {train_acc:.4f}')
@@ -159,7 +161,7 @@ def train(args, train_loader, test_loader):
 
             logits,_ = model(features)
             logits = logits[:,0]
-            loss = loss_fn(logits,label.float())
+            loss = loss_fn(logits, label.float())
             
             probs = sigmoid(logits)
             test_loss.append(loss.item())
@@ -170,6 +172,7 @@ def train(args, train_loader, test_loader):
                                                                 ))
         logger.Print("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(test_loader),
                                                         round(loss.item(),5),round(np.array(test_loss).mean(),5)))
+        total_test_loss.append(round(np.array(test_loss).mean(),5))
         test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
         test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
         logger.Print(f'Test Accuracy : {test_acc:.4f}')
@@ -188,33 +191,46 @@ def train(args, train_loader, test_loader):
         test_performs['Info'].append(test_cf.to_string())
         test_report = classification_report(np.array(test_labels), np.round(test_probs))
         logger.Print(test_report)
-            
-        if best_test_f1 < test_f1 :
-            logger.Print(' @@ New Best test_f1 !! @@ ')
-            best_test_f1 = test_f1 
-            best_test_epoch = epoch
-            logger.Print(f' @@ Best Test Accuracy : {np.array(test_performs["ACC"]).max()}')
-            logger.Print(f' @@ Best Test F1-Score : {best_test_f1}')
-            logger.Print(f' @@ Best Test Epoch : {epoch}')
+        
+        
+        if (epoch+1)%5 == 0:
             logger.Print(f'Saving Model ..... ')
             model_save(model,epoch+1,optimizer,np.array(train_loss).mean(),np.array(test_loss).mean(),
                     train_f1,test_f1,
-                    osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))          
+                    osp.join(args.model_path, f"epoch_{epoch+1}_model"+'.pth'))  
+                    
+        # if best_test_f1 <= test_f1 :
+        #     logger.Print(' @@ New Best test_f1 !! @@ ')
+        #     best_test_f1 = test_f1 
+        #     best_test_epoch = epoch
+        #     logger.Print(f' @@ Best Test Accuracy : {np.array(test_performs["ACC"]).max()}')
+        #     logger.Print(f' @@ Best Test F1-Score : {best_test_f1}')
+        #     logger.Print(f' @@ Best Test Epoch : {epoch}')
+        #     logger.Print(f'Saving Model ..... ')
+        #     model_save(model,epoch+1,optimizer,np.array(train_loss).mean(),np.array(test_loss).mean(),
+        #             train_f1,test_f1,
+        #             osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))          
     
+    draw_train_and_test_loss(args, total_train_loss, total_test_loss)
+    draw_accuracy_and_f1_during_training(args, test_performs["ACC"], test_performs["F1"])
+    
+    accu_max = np.array(test_performs["ACC"]).max()
+    accu_index = test_performs["ACC"].index(accu_max)
     f1_max = np.array(test_performs["F1"]).max()
-    index = test_performs["F1"].index(f1_max)
+    f1_index = test_performs["F1"].index(f1_max)
             
     logger.Print(' @@ THE END @@ ')
     logger.Print(f'  > Train Best Accuracy : {np.array(train_performs["ACC"]).max():.4f}')
     logger.Print(f'  > Train Best F1-Score : {np.array(train_performs["F1"]).max():.4f}')
     logger.Print(f'  > Test Best Accuracy : {np.array(test_performs["ACC"]).max():.4f}')
+    logger.Print(f'  > Test Epoch (Best Accuracy): {accu_index+1}')   
     logger.Print(f'  > Test Best F1-Score : {np.array(test_performs["F1"]).max():.4f}')
-    logger.Print(f'  > Test Epoch (Best F1-Score): {best_test_epoch+1}({index})')
-    logger.Print(f'  > Test Best CF') 
-    logger.Print(f'  > {np.array(test_performs["Info"][index])}')
+    logger.Print(f'  > Test Epoch (Best F1-Score): {f1_index+1}')
+    logger.Print(f'  > Test Best CF (std: Accuracy') 
+    logger.Print(f'  > {np.array(test_performs["Info"][accu_index])}')
+    logger.Print(f'  > Test Best CF (std: F1') 
+    logger.Print(f'  > {np.array(test_performs["Info"][f1_index])}')
     logger.Print(f'')
-    
-    return datetime.now() - start_time
 
 if __name__ == "__main__":
 
@@ -232,11 +248,10 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', default=12, type=int, help='dataset type: 12 or 15')
     parser.add_argument('--model', default='', type=str, help='rgb, rgbd, rgbp, rgbdp')   
     parser.add_argument('--inputchannel', default=3, type=int, help='inputchannel')
+    parser.add_argument('--crop', default=False, type=booltype, help='use crop (default: False)')
     
     parser.add_argument('--ae-path', default='', type=str, help='Pretrained AutoEncoder path')
-    parser.add_argument('--save-path', default='../bc_output/logs/Train/', type=str, help='train logs path')
-    parser.add_argument('--save-path-valid', default='', type=str, help='valid logs path')
-    parser.add_argument('--save-path-test', default='../bc_output/logs/Test/', type=str, help='test logs path')
+    parser.add_argument('--save-path', default='../bc_output/logs/', type=str, help='train logs path')
     parser.add_argument('--model-path', default='', type=str, help='model parameter path')
     parser.add_argument('--message', default='', type=str, help='parameter file name')                     
 
@@ -259,17 +274,10 @@ if __name__ == "__main__":
         sys.exit(0)
         
     # 결과 파일 path 설정 
-    time_string = time.strftime('%Y-%m-%d_%I:%M_%p', time.localtime(time.time()))
-    args.save_path = args.save_path + f'{args.message}' + '_' + f'{time_string}'
-    args.save_path_valid = args.save_path + '/valid'
-    args.save_path_test = args.save_path + '/test'
-
+    args.save_path = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_output/logs'
+    args.save_path = osp.join(args.save_path, args.message)
     if not os.path.exists(args.save_path): 
         os.makedirs(args.save_path)    
-    if not os.path.exists(args.save_path_valid): 
-        os.makedirs(args.save_path_valid)
-    if not os.path.exists(args.save_path_test): 
-        os.makedirs(args.save_path_test)
     
     # weight 파일 path
     args.model_path = f'/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_output/checkpoint/{args.message}'
@@ -296,7 +304,7 @@ if __name__ == "__main__":
 
     # logger 
     global logger 
-    logger = Logger(f'{args.save_path}/logs.logs')
+    logger = Logger(f'{args.save_path}/Train_logs.logs')
 
     # Autoencoder's path
     # RGB, Depth
@@ -311,11 +319,14 @@ if __name__ == "__main__":
     # autoencoder.load_state_dict(torch.load(args.ae_path))
     # autoencoder.eval()
 
-    train_loader, test_loader = Facedata_Loader(batch_size=4, num_workers=4, attack_type=args.attacktype, dataset_type=args.dataset, traindata_ratio=args.trainratio)
+    train_dataset, test_dataset = load_dataset(args)
     
+    train_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=True, num_workers=args.workers, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False, num_workers=args.workers, pin_memory=True)
+
     # train 코드
     train_start = time.time()
-    train_time = train(args, train_loader, test_loader)
+    train(args, train_loader, test_loader)
 
     train_time = str(timedelta(seconds=time.time()-train_start)).split(".")
     logger.Print(f"Train Execution Time: {train_time}")  

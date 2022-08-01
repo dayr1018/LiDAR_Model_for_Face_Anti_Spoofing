@@ -9,19 +9,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def image_crop_f(image):
-    image_crops = []
-    for i in range(3):
-        for j in range(3):
-            x_ = i*24
-            y_ = j*24
-            w_ = x_+64
-            h_ = y_+64
-            # img_crop = image[:,x_:w_,y_:h_]
-            img_crop = image[:,:,x_:w_,y_:h_]
-            image_crops.append(img_crop)
-    return image_crops
-
 def plot_roc_curve(path, title_info, y_true, y_prob):
     fpr, tpr, _ = roc_curve(y_true, y_prob)
     auc_value = auc(fpr, tpr)
@@ -96,3 +83,67 @@ def cal_metrics2(y_true, y_prob):
     acer = (apcer + npcer)/2
     
     return apcer, npcer, acer
+
+def draw_train_and_test_loss(args, train_losses, test_losses):
+    epoch_list = [i for i in range(1, args.epochs+1)]
+
+    fig = plt.figure()
+    title = f"Loss Graph ({args.model}-{args.attacktype})"
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.plot(epoch_list, train_losses, color="red", label="train_loss")
+    plt.plot(epoch_list, test_losses, color="blue", label="test_loss")
+    plt.legend(loc='upper right')
+    plt.savefig(args.save_path+"/Train_LossGraph.png")
+    plt.close(fig)
+    
+def draw_accuracy_and_f1_during_training(args, accuracy, f1):
+    epoch_list = [i for i in range(1, args.epochs+1)]   
+    
+    fig = plt.figure()
+    title = f"Accuracy and F1_score ({args.model}-{args.attacktype})"
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Evaluation Protocol")
+    plt.plot(epoch_list, accuracy, color="red", label="Accuracy")
+    plt.plot(epoch_list, f1, color="blue", label="F1_score")
+    plt.legend(loc='upper right')
+    plt.savefig(args.save_path+"/Train_EvaluationProtocol.png")
+    plt.close(fig)
+    
+def draw_accuracy_during_test(args, type1_acc, type2_acc, type3_acc, type4_acc, type5_acc):
+    epoch_list = [i for i in range(1, args.epochs+1) if i%5 == 0]   
+    
+    fig = plt.figure()
+    title = f"Accuracy ({args.model}-{args.attacktype})"
+    plt.title(title) 
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.plot(epoch_list, type1_acc, color="red", label="Indoor")
+    plt.plot(epoch_list, type2_acc, color="Green", label="Outdoor")
+    plt.plot(epoch_list, type3_acc, color="blue", label="Dark")
+    plt.plot(epoch_list, type4_acc, color="purple", label="Indoor + Outdoor")
+    plt.plot(epoch_list, type5_acc, color="brown", label="Indoor + Dark")
+    plt.legend(loc='upper right')
+    plt.savefig(args.save_path+"/Test_Accuracy.png")
+    plt.close(fig)
+
+
+def draw_f1_during_test(args, type1_f1, type2_f1, type3_f1, type4_f1, type5_f1):
+    epoch_list = [i for i in range(1, args.epochs+1) if i%5 == 0]   
+    
+    fig = plt.figure()
+    title = f"Accuracy ({args.model}-{args.attacktype})"
+    plt.title(title) 
+    plt.xlabel("Epochs")
+    plt.ylabel("F1 Score")
+    plt.plot(epoch_list, type1_f1, color="red", label="Indoor")
+    plt.plot(epoch_list, type2_f1, color="Green", label="Outdoor")
+    plt.plot(epoch_list, type3_f1, color="blue", label="Dark")
+    plt.plot(epoch_list, type4_f1, color="purple", label="Indoor + Outdoor")
+    plt.plot(epoch_list, type5_f1, color="brown", label="Indoor + Dark")  
+    
+    plt.legend(loc='upper right')
+    plt.savefig(args.save_path+"/Test_F1.png")
+    plt.close(fig)

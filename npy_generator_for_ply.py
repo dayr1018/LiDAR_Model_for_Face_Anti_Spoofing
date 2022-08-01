@@ -1,13 +1,9 @@
 import os
 import os.path as osp
 from tqdm import tqdm
-
 from plyfile import PlyData
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
 
-import torch
 
 def read_ply_xyzrgbnormal(filename):
     """ read XYZ RGB normals point cloud from filename PLY file """
@@ -42,11 +38,7 @@ if __name__ == "__main__":
             if not osp.exists(osp.join(save_path, dir_name, 'replay_cloud_data', str(i))) :
                 os.makedirs(osp.join(save_path, dir_name, 'replay_cloud_data', str(i)))
             if not osp.exists(osp.join(save_path, dir_name, 'paper_cloud_data', str(i))) :
-                os.makedirs(osp.join(save_path, dir_name, 'paper_cloud_data', str(i)))
-    
-  
-# 여기까지 함 
-                        
+                os.makedirs(osp.join(save_path, dir_name, 'paper_cloud_data', str(i)))        
             
     # bonafide
     for i in tqdm(person_number) :
@@ -74,7 +66,6 @@ if __name__ == "__main__":
     # data check
     for dir_name in kind:
         for i in person_number :
-            # org_path = osp.join(data_path,str(i))
             num_path = osp.join(data_path, dir_name, str(i))
             org_files = os.listdir(osp.join(num_path,'bonafide'))
             org_files = [j for j in org_files if j.split('_')[0]=='pc']
@@ -107,7 +98,6 @@ if __name__ == "__main__":
     # data check
     for dir_name in kind:
         for i in person_number :
-            # org_path = osp.join(data_path,str(i))
             num_path = osp.join(data_path, dir_name, str(i))
             org_files = os.listdir(osp.join(num_path,'attack_mask'))
             org_files = [j for j in org_files if j.split('_')[0]=='pc']
@@ -139,7 +129,6 @@ if __name__ == "__main__":
     # data check
     for dir_name in kind:
         for i in person_number :
-            # org_path = osp.join(data_path,str(i))
             num_path = osp.join(data_path, dir_name, str(i))
             org_files = os.listdir(osp.join(num_path,'attack_replay'))
             org_files = [j for j in org_files if j.split('_')[0]=='pc']
@@ -171,7 +160,6 @@ if __name__ == "__main__":
     # data check
     for dir_name in kind:
         for i in person_number :
-            # org_path = osp.join(data_path,str(i))
             num_path = osp.join(data_path, dir_name, str(i))
             org_files = os.listdir(osp.join(num_path,'attack_paper'))
             org_files = [j for j in org_files if j.split('_')[0]=='pc']
