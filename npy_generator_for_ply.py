@@ -26,6 +26,7 @@ if __name__ == "__main__":
     save_path = '/mnt/nas3/yrkim/liveness_lidar_project/GC_project/LDFAS/NPY_Files'
 
     kind = ["1. Indoor", "2. Outdoor", "3. Indoor_dark"]
+
     for idx, dir_name in enumerate(kind):
         dir_path = osp.join(data_path, dir_name)
         

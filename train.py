@@ -58,8 +58,8 @@ def train(args, train_loader, test_loader):
 
     # Tensorboard 
     global writer
-    # writer = SummaryWriter(f"runs/{args.message}")
-
+    writer = SummaryWriter(f"runs/{args.message}")           
+            
     # args 출력
     logger.Print(args)
 
@@ -69,7 +69,8 @@ def train(args, train_loader, test_loader):
     
     # Loss, 옵티마이저, 스케줄러 생성 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    # scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=0)
+    
         
     # Train 
     train_performs, test_performs = {'ACC':[],'F1':[]},{'ACC':[],'F1':[], 'Info':[]}
@@ -118,9 +119,11 @@ def train(args, train_loader, test_loader):
                                                         round(loss.item(),5),round(np.array(train_loss).mean(),5)
                                                                 ))
         
+        scheduler.step()
         logger.Print("[Train] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(train_loader),
                                                         round(loss.item(),5),round(np.array(train_loss).mean(),5)))    
         total_train_loss.append(round(np.array(train_loss).mean(),5))
+        writer.add_scalar("Train Loss/Epoch (Train)", round(np.array(train_loss).mean(),5), epoch)
         train_acc = accuracy_score(np.array(train_labels), np.round(train_probs))
         train_f1 = f1_score(np.array(train_labels), np.round(train_probs), average='macro')
         logger.Print(f'Train Accuracy : {train_acc:.4f}')
@@ -173,6 +176,7 @@ def train(args, train_loader, test_loader):
         logger.Print("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch+1,epochs,step+1,len(test_loader),
                                                         round(loss.item(),5),round(np.array(test_loss).mean(),5)))
         total_test_loss.append(round(np.array(test_loss).mean(),5))
+        writer.add_scalar("Test Loss/Epoch (Train)", round(np.array(test_loss).mean(),5), epoch)
         test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
         test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
         logger.Print(f'Test Accuracy : {test_acc:.4f}')
@@ -231,6 +235,8 @@ def train(args, train_loader, test_loader):
     logger.Print(f'  > Test Best CF (std: F1') 
     logger.Print(f'  > {np.array(test_performs["Info"][f1_index])}')
     logger.Print(f'')
+    
+    writer.close()
 
 if __name__ == "__main__":
 

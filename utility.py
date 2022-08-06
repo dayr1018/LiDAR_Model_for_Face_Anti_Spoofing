@@ -112,7 +112,7 @@ def draw_accuracy_and_f1_during_training(args, accuracy, f1):
     plt.savefig(args.save_path+"/Train_EvaluationProtocol.png")
     plt.close(fig)
     
-def draw_accuracy_during_test(args, type1_acc, type2_acc, type3_acc, type4_acc, type5_acc):
+def draw_accuracy_during_test(args, acc_type):
     epoch_list = [i for i in range(1, args.epochs+1) if i%5 == 0]   
     
     fig = plt.figure()
@@ -120,29 +120,29 @@ def draw_accuracy_during_test(args, type1_acc, type2_acc, type3_acc, type4_acc, 
     plt.title(title) 
     plt.xlabel("Epochs")
     plt.ylabel("Accuracy")
-    plt.plot(epoch_list, type1_acc, color="red", label="Indoor")
-    plt.plot(epoch_list, type2_acc, color="Green", label="Outdoor")
-    plt.plot(epoch_list, type3_acc, color="blue", label="Dark")
-    plt.plot(epoch_list, type4_acc, color="purple", label="Indoor + Outdoor")
-    plt.plot(epoch_list, type5_acc, color="brown", label="Indoor + Dark")
+    plt.plot(epoch_list, acc_type[0], color="red", label="Indoor")
+    plt.plot(epoch_list, acc_type[1], color="Green", label="Outdoor")
+    plt.plot(epoch_list, acc_type[2], color="blue", label="Dark")
+    plt.plot(epoch_list, acc_type[3], color="purple", label="Indoor + Outdoor")
+    plt.plot(epoch_list, acc_type[4], color="brown", label="Indoor + Dark")
     plt.legend(loc='upper right')
     plt.savefig(args.save_path+"/Test_Accuracy.png")
     plt.close(fig)
 
 
-def draw_f1_during_test(args, type1_f1, type2_f1, type3_f1, type4_f1, type5_f1):
+def draw_f1_during_test(args, f1_type):
     epoch_list = [i for i in range(1, args.epochs+1) if i%5 == 0]   
     
     fig = plt.figure()
-    title = f"Accuracy ({args.model}-{args.attacktype})"
+    title = f"F1 score ({args.model}-{args.attacktype})"
     plt.title(title) 
     plt.xlabel("Epochs")
     plt.ylabel("F1 Score")
-    plt.plot(epoch_list, type1_f1, color="red", label="Indoor")
-    plt.plot(epoch_list, type2_f1, color="Green", label="Outdoor")
-    plt.plot(epoch_list, type3_f1, color="blue", label="Dark")
-    plt.plot(epoch_list, type4_f1, color="purple", label="Indoor + Outdoor")
-    plt.plot(epoch_list, type5_f1, color="brown", label="Indoor + Dark")  
+    plt.plot(epoch_list, f1_type[0], color="red", label="Indoor")
+    plt.plot(epoch_list, f1_type[1], color="Green", label="Outdoor")
+    plt.plot(epoch_list, f1_type[2], color="blue", label="Dark")
+    plt.plot(epoch_list, f1_type[3], color="purple", label="Indoor + Outdoor")
+    plt.plot(epoch_list, f1_type[4], color="brown", label="Indoor + Dark")  
     
     plt.legend(loc='upper right')
     plt.savefig(args.save_path+"/Test_F1.png")

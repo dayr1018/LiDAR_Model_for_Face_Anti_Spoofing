@@ -16,6 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as T
 import torch
 import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 
 from models.Network import Face_Detection_Model
 from dataloader.dataloader import load_dataset, load_test_dataset
@@ -36,7 +37,7 @@ def test(args, dataloader):
     loss_fn = nn.BCEWithLogitsLoss()  
     
     for epoch in range(start_epoch+1, epochs+1) :
-        if (epoch%5) != 0:
+        if (epoch%10) != 0:
             continue
         
         model_path = osp.join(args.model_path, f"epoch_{epoch}_model.pth")
@@ -94,6 +95,8 @@ def test(args, dataloader):
         
         test_performs['ACC'].append(test_acc)  
         test_performs['F1'].append(test_f1)  
+        # writer.add_scalar("Accuracy/Epoch (Test)", test_acc, epoch)
+        # writer.add_scalar("F1 Score/Epoch (Test)", test_f1, epoch)
         print(f"!!!!!!!!!!! Test Accuracy : {test_acc}")
 
     accu_max = np.array(test_performs["ACC"]).max()
@@ -183,6 +186,9 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    # Tensorboard 
+    global writer
+
     # logger 
     global logger 
     logger = Logger(f'{args.save_path}/Test_logs.logs')
@@ -211,13 +217,35 @@ if __name__ == "__main__":
     type4_loader = DataLoader(type4_testset, batch_size=args.batchsize, shuffle=False, num_workers=args.workers, pin_memory=True)
     type5_loader = DataLoader(type5_testset, batch_size=args.batchsize, shuffle=False, num_workers=args.workers, pin_memory=True)
     
-    # 세 가지 경우의 Acc, F1 정리 
-    type1_acc, type1_f1 = test(args, type1_loader)
-    type2_acc, type2_f1 = test(args, type2_loader)
-    type3_acc, type3_f1 = test(args, type3_loader)
-    type4_acc, type4_f1 = test(args, type4_loader)
-    type5_acc, type5_f1 = test(args, type5_loader)
+    #다섯 가지 경우의 Acc, F1 정리 
+    types =  ["Indoor", "Outdoor", "Indoor(dark)", "Indoor+Outdoor", "Indoor+Indoor(dark)"]
+    acc_type = [[] for i in range(5)]
+    f1_type = [[] for i in range(5)]
+    dataloaders = [type1_loader, type2_loader, type3_loader, type4_loader, type5_loader]  
+    # acc_type = [[] for i in range(3)]
+    # f1_type = [[] for i in range(3)] 
+    # dataloaders = [type1_loader, type3_loader, type5_loader]    
+        
+    for i, loader in enumerate(dataloaders):
+        writer = SummaryWriter(f"runs/{args.message}_{types[i]}")
+        acc_type[i], f1_type[i] = test(args, loader)
+        writer.close()
+
+    # 최종 결과 
+    types =  ["Indoor\t", "Outdoor\t", "Indoor(dark)\t", "Indoor+Outdoor", "Indoor+Indoor(dark)"]
+    logger.Print(f"|-------------------  Result  -------------------|")  
+    logger.Print(f"\t\t\tAccuracy\tF1 Score")
+    for i in range(5):
+        logger.Print(f"{i+1}. {types[i]}\t{max(acc_type[i]):.4f} ({(acc_type[i].index(max(acc_type[i]))+1)*5})\t{max(f1_type[i]):.4f} ({(f1_type[i].index(max(f1_type[i]))+1)*5})")    
+                    
+    # types =  ["Indoor\t", "Indoor(dark)\t", "Indoor+Indoor(dark)"]
+    # logger.Print(f"|-------------------  Result  -------------------|")  
+    # logger.Print(f"\t\t\tAccuracy\tF1 Score")
+    # for i in range(3):
+    #     logger.Print(f"{i+1}. {types[i]}\t{max(acc_type[i]):.4f} ({(acc_type[i].index(max(acc_type[i]))+1)*5})\t{max(f1_type[i]):.4f} ({(f1_type[i].index(max(f1_type[i]))+1)*5})")                
         
     # plt 로 위의 세 경우 그리기 
-    draw_accuracy_during_test(args, type1_acc, type2_acc, type3_acc, type4_acc, type5_acc)
-    draw_f1_during_test(args, type1_f1, type2_f1, type3_f1, type4_f1, type5_f1)
+    draw_accuracy_during_test(args, acc_type)
+    draw_f1_during_test(args, f1_type)
+
+    # writer.close()
