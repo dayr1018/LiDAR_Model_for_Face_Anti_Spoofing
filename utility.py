@@ -4,23 +4,50 @@ from torch.serialization import location_tag
 matplotlib.use('Agg')
 plt.switch_backend('agg')
 import numpy as np
-from sklearn.metrics import roc_curve, auc, confusion_matrix
+from sklearn.metrics import roc_curve, auc, confusion_matrix, roc_auc_score
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# def plot_roc_curve(path, title_info, y_true, y_prob):
+#     fpr, tpr, thresholds = roc_curve(y_true, y_prob)
+#     optimal_idx = np.argmax(tpr-fpr)
+#     optimal_threshold = thresholds[optimal_idx]
+#     auc_value = auc(fpr, tpr)
+
+#     fig = plt.figure()
+#     plt.title("ROC Curve")
+#     plt.xlabel("APCER")
+#     plt.ylabel("1-BPCER")    
+#     plt.plot(fpr, tpr, color='red', label=title_info)
+#     plt.plot([0,1], [0,1], color='green', linestyle='--') 
+#     plt.legend(loc='upper left')
+#     plt.text(0.55, 0.1, f"Area Under the Curve:{auc_value:4f}")
+#     plt.text(0.55, 0.3, f"Best threshold:{optimal_threshold:4f}")
+#     plt.text(0.55, 0.3, f"Best 1-BPCER:{tpr[optimal_idx]:4f}")
+#     plt.text(0.55, 0.3, f"Best APCER:{fpr[optimal_idx]:4f}")
+#     plt.savefig(path+f'/{title_info}_roc_curve.png')
+#     plt.close(fig)
+
+#     return auc_value
+    
 def plot_roc_curve(path, title_info, y_true, y_prob):
-    fpr, tpr, _ = roc_curve(y_true, y_prob)
-    auc_value = auc(fpr, tpr)
+    fpr, tpr, thresholds = roc_curve(y_true, y_prob)
+    optimal_idx = np.argmax(tpr-fpr)
+    optimal_threshold = thresholds[optimal_idx]
+    auc_value = roc_auc_score(y_true, y_prob)
 
     fig = plt.figure()
     plt.title("ROC Curve")
-    plt.xlabel("False Positive Rate (FPR)")
-    plt.ylabel("True Positive Rate (TPR)")    
+    plt.xlabel("APCER")
+    plt.ylabel("1-BPCER")    
     plt.plot(fpr, tpr, color='red', label=title_info)
     plt.plot([0,1], [0,1], color='green', linestyle='--') 
     plt.legend(loc='upper left')
-    plt.text(0.55, 0.1, f"Area Under the Curve:{ auc_value:4f}")
+    plt.text(0.55, 0.4, f"Best threshold:{optimal_threshold:4f}")
+    plt.text(0.55, 0.3, f"Best 1-BPCER:{tpr[optimal_idx]:4f}")
+    plt.text(0.55, 0.2, f"Best APCER:{fpr[optimal_idx]:4f}")
+    plt.text(0.55, 0.1, f"Area Under the Curve:{auc_value:4f}")
     plt.savefig(path+f'/{title_info}_roc_curve.png')
     plt.close(fig)
 
@@ -108,9 +135,48 @@ def draw_accuracy_and_f1_during_training(args, accuracy, f1):
     plt.ylabel("Evaluation Protocol")
     plt.plot(epoch_list, accuracy, color="red", label="Accuracy")
     plt.plot(epoch_list, f1, color="blue", label="F1_score")
-    plt.legend(loc='upper right')
+    plt.legend(loc='lower right')
     plt.savefig(args.save_path+"/Train_EvaluationProtocol.png")
     plt.close(fig)
+
+def draw_train_and_test_loss1(args, train_losses, test_losses, outdoor_losses, dark_losses):
+    epoch_list = [i for i in range(1, args.epochs+1)]
+
+    fig = plt.figure()
+    title = f"Loss Graph ({args.model}-{args.attacktype})"
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.plot(epoch_list, train_losses, color="red", label="train_loss")
+    plt.plot(epoch_list, test_losses, color="blue", label="test_loss")
+    plt.plot(epoch_list, outdoor_losses, color="green", label="outdoor_loss")
+    plt.plot(epoch_list, dark_losses, color="purple", label="dark_loss")
+    plt.legend(loc='upper right')
+    plt.savefig(args.save_path+"/Train_LossGraph.png")
+    plt.close(fig)
+    
+def draw_accuracy_and_f1_during_training1(args, train_accuracy, train_f1, test_accuracy, test_f1, outdoor_accuracy, outdoor_f1, dark_accuracy, dark_f1):
+    epoch_list = [i for i in range(1, args.epochs+1)]   
+    
+    fig = plt.figure()
+    title = f"Accuracy and F1_score ({args.model}-{args.attacktype})"
+    plt.title(title)
+    plt.xlabel("Epochs")
+    plt.ylabel("Evaluation Protocol")
+    plt.plot(epoch_list, train_accuracy, color="red", label="Accuracy(train)")
+    plt.plot(epoch_list, train_f1, color="blue", label="F1_score(train)")
+    plt.plot(epoch_list, test_accuracy, color="green", label="Accuracy(indoor)")
+    plt.plot(epoch_list, test_f1, color="purple", label="F1_score(indoor)")
+    plt.plot(epoch_list, outdoor_accuracy, color="green", label="Accuracy(outdoor)")
+    plt.plot(epoch_list, outdoor_f1, color="purple", label="F1_score(outdoor)")
+    plt.plot(epoch_list, dark_accuracy, color="green", label="Accuracy(dark)")
+    plt.plot(epoch_list, dark_f1, color="purple", label="F1_score(dark)")
+    plt.legend(loc='lower right')
+    plt.savefig(args.save_path+"/Train_EvaluationProtocol1(total).png")
+    plt.close(fig)
+    
+    
+    
     
 def draw_accuracy_during_test(args, acc_type):
     epoch_list = [i for i in range(1, args.epochs+1) if i%5 == 0]   
