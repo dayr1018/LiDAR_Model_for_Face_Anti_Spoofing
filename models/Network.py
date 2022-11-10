@@ -3,58 +3,41 @@ import torch
 import torch.nn as nn
 from torchsummary import summary
 
-def deleteBatchnorm(model):
-    # del model.bn1
-    # del model.layer1[0].bn1
-    # del model.layer1[0].bn2
-    # del model.layer1[1].bn1
-    # del model.layer1[1].bn2
-    # del model.layer1[2].bn1
-    # del model.layer1[2].bn2
 
-    del model.layer2[0].bn1
-    del model.layer2[0].bn2
-    del model.layer2[0].downsample[1]
-    del model.layer2[1].bn1
-    del model.layer2[1].bn2
-    del model.layer2[2].bn1
-    del model.layer2[2].bn2
-    del model.layer2[3].bn1
-    del model.layer2[3].bn2
-
-    del model.layer3[0].bn1
-    del model.layer3[0].bn2
-    del model.layer3[0].downsample[1]
-    del model.layer3[1].bn1
-    del model.layer3[1].bn2
-    del model.layer3[2].bn1
-    del model.layer3[2].bn2
-    del model.layer3[3].bn1
-    del model.layer3[3].bn2
-    del model.layer3[4].bn1
-    del model.layer3[4].bn2
-    del model.layer3[5].bn1
-    del model.layer3[5].bn2
-
-    del model.layer4[0].bn1
-    del model.layer4[0].bn2
-    del model.layer4[0].downsample[1]
-    del model.layer4[1].bn1
-    del model.layer4[1].bn2
-    del model.layer4[2].bn1
-    del model.layer4[2].bn2
+### Ablation Study - Point Cloud 만 실험    
+class pointcloud_model(nn.Module):
+    def __init__(self,device):
+        super().__init__()
+ 
+        self.pt_model = Face_Detection_Model(3,get_features=True).to(device)            
+        self.fc = nn.Linear(512,1).to(device)
+        
+    def forward(self,cloud):
+        feature = self.pt_model(cloud)
+        logit = self.fc(feature)
+        return logit
     
-### RGB / Cloud 따로 실험    
-class rgbp_twostep_model(nn.Module):
+### Ablation Study - Depth 만 실험    
+class depth_model(nn.Module):
+    def __init__(self,device):
+        super().__init__()
+ 
+        self.depth_model = Face_Detection_Model(1,get_features=True).to(device)            
+        self.fc = nn.Linear(512,1).to(device)
+        
+    def forward(self,depth):
+        feature = self.depth_model(depth)
+        logit = self.fc(feature)
+        return logit
+    
+       
+## RGB / Cloud 따로 실험 v1
+class rgbp_v1_twostep_model(nn.Module):
     def __init__(self,device):
         super().__init__()
 
         self.rgb_model = Face_Detection_Model(3,get_features=True).to(device)    
-        self.pt_model = Face_Detection_Model(3,get_features=True).to(device)    
-        # deleteBatchnorm(self.pt_model)
-        # summary(self.rgb_model, input_size=(3,180,180))
-        summary(self.pt_model, input_size=(3,180,180))
-        
+        self.pt_model = Face_Detection_Model(3,get_features=True).to(device)            
         self.fc = nn.Linear(1024,1).to(device)
         
     def forward(self,rgb,cloud):
@@ -64,37 +47,23 @@ class rgbp_twostep_model(nn.Module):
         logit = self.fc(features)
         return logit
 
-### RGB / Cloud 따로 실험  v2 
+# RGB + Cloud 같이 실험  (v2 로 실험)    
 class rgbp_v2_twostep_model(nn.Module):
     def __init__(self,device):
         super().__init__()
 
-        self.rgb_model = Face_Detection_Model(3,get_features=True).to(device)    
-        self.x_model = Face_Detection_Model(1,get_features=True).to(device)
-        self.y_model = Face_Detection_Model(1,get_features=True).to(device)
-        self.z_model = Face_Detection_Model(1,get_features=True).to(device) 
-        self.fc = nn.Linear(2048,1).to(device)
+        self.rgb_pt_model = Face_Detection_Model(6,get_features=True).to(device)    
+        self.fc = nn.Linear(512,1).to(device)
         
-    # def forward(self,rgb,x,y,z):
     def forward(self,rgb,cloud):
-        rgb_feature = self.rgb_model(rgb)
-        x = cloud[:,0,:,:].unsqueeze(1)
-        y = cloud[:,1,:,:].unsqueeze(1)
-        z = cloud[:,2,:,:].unsqueeze(1)
-        print(f"!!!{x.size()}")
-        print(f"!!!{y.size()}")
-        print(f"!!!{z.size()}")
-
-        x_featrue = self.x_model(x)
-        y_featrue = self.y_model(y)
-        z_featrue = self.z_model(z)
-        
-        features = torch.concat([rgb_feature,x_featrue, y_featrue, z_featrue],axis=1)
+        rgb_pt = torch.concat([rgb,cloud],axis=1)
+        features = self.rgb_pt_model(rgb_pt)
         logit = self.fc(features)
         return logit
 
-### RGB / Depth 따로 실험  v1  
-class rgbd_twostep_model(nn.Module):
+
+## RGB / Depth 따로 실험  v1  
+class rgbd_v1_twostep_model(nn.Module):
     def __init__(self,device):
         super().__init__()
         # Model 생성 및 아키텍쳐 출력   
@@ -110,16 +79,16 @@ class rgbd_twostep_model(nn.Module):
         logit = self.fc(features)
         return logit    
         
-# ### RGB + Depth 로 실험 v2   
-# class rgbd_twostep_model(nn.Module):
-#     def __init__(self,device):
-#         super().__init__() 
-#         self.rgb_depth_model = Face_Detection_Model(4,get_features=False).to(device)    
+### RGB + Depth 로 실험 v2   
+class rgbd_v2_twostep_model(nn.Module):
+    def __init__(self,device):
+        super().__init__() 
+        self.rgb_depth_model = Face_Detection_Model(4,get_features=False).to(device)    
         
-#     def forward(self,rgb,depth):
-#         rgb_depth = torch.concat([rgb,depth],axis=1)
-#         logit = self.rgb_depth_model(rgb_depth)    
-#         return logit           
+    def forward(self,rgb,depth):
+        rgb_depth = torch.concat([rgb,depth],axis=1)
+        logit = self.rgb_depth_model(rgb_depth)    
+        return logit           
         
         
 ## RGB / Depth / Cloud 따로 실험 v1 
@@ -155,8 +124,8 @@ class rgbdp_v2_twostep_model(nn.Module):
         
         features = torch.concat([rgb_feature,cloud_depth_feature],axis=1)
         logit = self.fc(features)
-        return logit   
         # return features
+        return logit   
 
 
 ### RGB + Depth + Point Cloud 같이 실험 v3
@@ -174,13 +143,8 @@ class rgbdp_v3_twostep_model(nn.Module):
         return logit 
         
         
-
-
 ########################################################
 
- 
-
-        
 ### RGB + Depth / Cloud 로 실험    
 # class rgbdp_twostep_model(nn.Module):
 #     def __init__(self,device):
@@ -210,9 +174,14 @@ class Identity(nn.Module):
         return x
 
 # ResNet34 사용 
-def Face_Detection_Model(inputdata_channel=3,get_features=False):
-    return ResNet(BasicBlock, [3,4,6,3], inputdata_channel=inputdata_channel,get_features=get_features)
-
+def Face_Detection_Model(inputdata_channel=3, get_features=False):
+    return ResNet(BasicBlock, [3,4,6,3], inputdata_channel=inputdata_channel, get_features=get_features)
+     
+    # if get_features:
+    #     return feature
+    # else:
+    #     return logit, feature
+     
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
@@ -406,6 +375,8 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
+        out = self.fc(x)
+
         if self.get_features : 
             return x
         else : 

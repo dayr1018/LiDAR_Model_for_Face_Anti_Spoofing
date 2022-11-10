@@ -26,8 +26,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from torchsummary import summary
 
-from models.Network import Face_Detection_Model, rgbp_twostep_model, rgbp_v2_twostep_model, rgbd_twostep_model, rgbdp_v1_twostep_model, rgbdp_v2_twostep_model, rgbdp_v3_twostep_model
-# from models.hm_Network import Face_Detection_Model
+from models.Network import Face_Detection_Model, pointcloud_model, depth_model, rgbp_v1_twostep_model, rgbp_v2_twostep_model, rgbd_v1_twostep_model, rgbd_v2_twostep_model, rgbdp_v1_twostep_model, rgbdp_v2_twostep_model, rgbdp_v3_twostep_model
 from dataloader.dataloader import load_dataset, load_test_dataset
 from utility import draw_train_and_test_loss, draw_train_and_test_loss1, draw_accuracy_and_f1_during_training, draw_accuracy_and_f1_during_training1
 from loger import Logger
@@ -56,47 +55,6 @@ def model_save(model, epoch, optimizer, train_loss, val_loss, train_f1, valid_f1
                 }, path)
     print('Model Save ! > ', path)
 
-def deleteBatchnorm(model):
-    del model.bn1
-    del model.layer1[0].bn1
-    del model.layer1[0].bn2
-    del model.layer1[1].bn1
-    del model.layer1[1].bn2
-    del model.layer1[2].bn1
-    del model.layer1[2].bn2
-
-    del model.layer2[0].bn1
-    del model.layer2[0].bn2
-    del model.layer2[0].downsample[1]
-    del model.layer2[1].bn1
-    del model.layer2[1].bn2
-    del model.layer2[2].bn1
-    del model.layer2[2].bn2
-    del model.layer2[3].bn1
-    del model.layer2[3].bn2
-
-    del model.layer3[0].bn1
-    del model.layer3[0].bn2
-    del model.layer3[0].downsample[1]
-    del model.layer3[1].bn1
-    del model.layer3[1].bn2
-    del model.layer3[2].bn1
-    del model.layer3[2].bn2
-    del model.layer3[3].bn1
-    del model.layer3[3].bn2
-    del model.layer3[4].bn1
-    del model.layer3[4].bn2
-    del model.layer3[5].bn1
-    del model.layer3[5].bn2
-
-    del model.layer4[0].bn1
-    del model.layer4[0].bn2
-    del model.layer4[0].downsample[1]
-    del model.layer4[1].bn1
-    del model.layer4[1].bn2
-    del model.layer4[2].bn1
-    del model.layer4[2].bn2
-    
 def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
 
     # Tensorboard 
@@ -109,14 +67,20 @@ def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
     # Model 생성 및 아키텍쳐 출력   
     model=""
     if args.model == "rgb":
-        model = Face_Detection_Model(3).to(args.device)         
-    elif args.model == "rgbp":
-        model = rgbp_twostep_model(device=args.device)
+        model = Face_Detection_Model(3).to(args.device) 
+        # model = rgb_model(device=args.device)         
+    elif args.model == "pointcloud":
+        model = pointcloud_model(device=args.device)   
+    elif args.model == "depth":
+        model = depth_model(device=args.device)    
+    elif args.model == "rgbp_v1":
+        model = rgbp_v1_twostep_model(device=args.device)
     elif args.model == "rgbp_v2":
         model = rgbp_v2_twostep_model(device=args.device)
-    elif args.model == "rgbd":
-        # model = Face_Detection_Model(4).to(args.device) 
-        model = rgbd_twostep_model(device=args.device)
+    elif args.model == "rgbd_v1":
+        model = rgbd_v1_twostep_model(device=args.device)
+    elif args.model == "rgbd_v2":
+        model = rgbd_v2_twostep_model(device=args.device)
     elif args.model == "rgbdp_v1":
         model = rgbdp_v1_twostep_model(device=args.device)
     elif args.model == "rgbdp_v2":
@@ -124,10 +88,10 @@ def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
     elif args.model == "rgbdp_v3":
         model = rgbdp_v3_twostep_model(device=args.device)
     # summary(model)
-    
-    # if use_saveinit == False:
-    #     path = args.init_path
-        # model.load_state_dict(torch.load(path)['model_state_dict'])
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = torch.nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count())))
+    model.to(device)
 
     # Loss, 옵티마이저, 스케줄러 생성 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -170,14 +134,16 @@ def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
             depth = depth.float().to(args.device)
             label = label.float().to(args.device)
             
-            # print(f"!!!!!!!!{cloud.size()}")
-            
             optimizer.zero_grad() 
             if args.model == "rgb":
                 logits = model(rgb)
-            elif args.model in ["rgbp", "rgbp_v2"]:
+            elif args.model == "pointcloud":
+                logits = model(cloud)  
+            elif args.model == "depth":
+                logits = model(depth)   
+            elif args.model in ["rgbp_v1", "rgbp_v2"]:
                 logits = model(rgb, cloud)
-            elif args.model == "rgbd":
+            elif args.model in ["rgbd_v1", "rgbd_v2"]:
                 logits = model(rgb, depth)
             elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
                 logits = model(rgb, depth, cloud)
@@ -229,205 +195,218 @@ def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
         indoor_check['train_f1'].append(train_f1)
         indoor_check['train_acc'].append(train_acc)
             
-        model.eval()
+
+        # # Comment Start
+        # # Test Start     
+        # model.eval()
     
-        # Indoor test
-        test_loss = []
-        test_probs, test_labels = [],[]
-        test_bar = tqdm(enumerate(test_loader))
-        for step, data in test_bar :  
-            rgb, cloud, depth, label = data
-            rgb = rgb.float().to(args.device)
-            cloud = cloud.float().to(args.device)
-            depth = depth.float().to(args.device)
-            label = label.float().to(args.device)
+        # # Indoor test
+        # test_loss = []
+        # test_probs, test_labels = [],[]
+        # test_bar = tqdm(enumerate(test_loader))
+        # for step, data in test_bar :  
+        #     rgb, cloud, depth, label = data
+        #     rgb = rgb.float().to(args.device)
+        #     cloud = cloud.float().to(args.device)
+        #     depth = depth.float().to(args.device)
+        #     label = label.float().to(args.device)
             
-            if args.model == "rgb":
-                logits = model(rgb)
-            elif args.model in ["rgbp", "rgbp_v2"]:
-                logits = model(rgb, cloud)
-            elif args.model == "rgbd":
-                logits = model(rgb, depth)
-            elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
-                logits = model(rgb, depth, cloud)            
+        #     if args.model == "rgb":
+        #         logits = model(rgb)
+        #     elif args.model == "pointcloud":
+        #         logits = model(cloud)  
+        #     elif args.model == "depth":
+        #         logits = model(depth)   
+        #     elif args.model in ["rgbp_v1", "rgbp_v2"]:
+        #         logits = model(rgb, cloud)
+        #     elif args.model in ["rgbd_v1", "rgbd_v2"]:
+        #         logits = model(rgb, depth)
+        #     elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
+        #         logits = model(rgb, depth, cloud)            
    
-            logits = logits[:,0]
-            loss = loss_fn(logits, label.float())
+        #     logits = logits[:,0]
+        #     loss = loss_fn(logits, label.float())
             
-            probs = sigmoid(logits)
-            test_loss.append(loss.item())
-            test_probs += probs.cpu().detach().tolist()
-            test_labels += label.cpu().detach().tolist()        
-            test_bar.set_description("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
-                                                        round(loss.item(),5),round(np.array(test_loss).mean(),5)
-                                                                ))
+        #     probs = sigmoid(logits)
+        #     test_loss.append(loss.item())
+        #     test_probs += probs.cpu().detach().tolist()
+        #     test_labels += label.cpu().detach().tolist()        
+        #     test_bar.set_description("[Test] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
+        #                                                 round(loss.item(),5),round(np.array(test_loss).mean(),5)
+        #                                                         ))
             
-        indoor_check['test_loss'].append(np.array(test_loss).mean())
-        indoor_check['test_f1'].append(f1_score(np.array(test_labels), np.round(test_probs), average='macro'))
-        indoor_check['test_acc'].append(accuracy_score(np.array(test_labels), np.round(test_probs)))
-            
-        # Outdoor test
-        outdoor_loss = []
-        outdoor_probs, outdoor_labels = [], []
-        outdoor_bar = tqdm(enumerate(outdoor_loader))
-        for step, data in outdoor_bar :  
-            rgb, cloud, depth, label = data
-            rgb = rgb.float().to(args.device)
-            cloud = cloud.float().to(args.device)
-            depth = depth.float().to(args.device)
-            label = label.float().to(args.device)
+        # indoor_check['test_loss'].append(np.array(test_loss).mean())
+        # indoor_check['test_f1'].append(f1_score(np.array(test_labels), np.round(test_probs), average='macro'))
+        # indoor_check['test_acc'].append(accuracy_score(np.array(test_labels), np.round(test_probs)))
+                     
+        # # Outdoor test
+        # outdoor_loss = []
+        # outdoor_probs, outdoor_labels = [], []
+        # outdoor_bar = tqdm(enumerate(outdoor_loader))
+        # for step, data in outdoor_bar :  
+        #     rgb, cloud, depth, label = data
+        #     rgb = rgb.float().to(args.device)
+        #     cloud = cloud.float().to(args.device)
+        #     depth = depth.float().to(args.device)
+        #     label = label.float().to(args.device)
 
-            if args.model == "rgb":
-                logits = model(rgb)
-            elif args.model in ["rgbp", "rgbp_v2"]:
-                logits = model(rgb, cloud)
-            elif args.model == "rgbd":
-                logits = model(rgb, depth)
-            elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
-                logits = model(rgb, depth, cloud)   
+        #     if args.model == "rgb":
+        #         logits = model(rgb)
+        #     elif args.model == "pointcloud":
+        #         logits = model(cloud)  
+        #     elif args.model == "depth":
+        #         logits = model(depth)   
+        #     elif args.model in ["rgbp_v1", "rgbp_v2"]:
+        #         logits = model(rgb, cloud)
+        #     elif args.model in ["rgbd_v1", "rgbd_v2"]:
+        #         logits = model(rgb, depth)
+        #     elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
+        #         logits = model(rgb, depth, cloud)   
                 
-            logits = logits[:,0]
-            loss = loss_fn(logits, label.float())
+        #     logits = logits[:,0]
+        #     loss = loss_fn(logits, label.float())
             
-            probs = sigmoid(logits)
-            outdoor_loss.append(loss.item())
-            outdoor_probs += probs.cpu().detach().tolist()
-            outdoor_labels += label.cpu().detach().tolist()        
-            outdoor_bar.set_description("[Outdoor] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
-                                                        round(loss.item(),5),round(np.array(outdoor_loss).mean(),5)
-                                                                ))
+        #     probs = sigmoid(logits)
+        #     outdoor_loss.append(loss.item())
+        #     outdoor_probs += probs.cpu().detach().tolist()
+        #     outdoor_labels += label.cpu().detach().tolist()        
+        #     outdoor_bar.set_description("[Outdoor] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
+        #                                                 round(loss.item(),5),round(np.array(outdoor_loss).mean(),5)
+        #                                                         ))
         
-        outdoor_check['test_loss'].append(np.array(outdoor_loss).mean())
-        outdoor_check['test_f1'].append(f1_score(np.array(outdoor_labels), np.round(outdoor_probs), average='macro'))
-        outdoor_check['test_acc'].append(accuracy_score(np.array(outdoor_labels), np.round(outdoor_probs)))
+        # outdoor_check['test_loss'].append(np.array(outdoor_loss).mean())
+        # outdoor_check['test_f1'].append(f1_score(np.array(outdoor_labels), np.round(outdoor_probs), average='macro'))
+        # outdoor_check['test_acc'].append(accuracy_score(np.array(outdoor_labels), np.round(outdoor_probs)))
           
-        # Dark test
-        dark_loss = []
-        dark_probs, dark_labels = [], []  
-        dark_bar = tqdm(enumerate(dark_loader))
-        for step, data in dark_bar :  
-            rgb, cloud, depth, label = data
-            rgb = rgb.float().to(args.device)
-            cloud = cloud.float().to(args.device)
-            depth = depth.float().to(args.device)
-            label = label.float().to(args.device)
+        # # Dark test
+        # dark_loss = []
+        # dark_probs, dark_labels = [], []  
+        # dark_bar = tqdm(enumerate(dark_loader))
+        # for step, data in dark_bar :  
+        #     rgb, cloud, depth, label = data
+        #     rgb = rgb.float().to(args.device)
+        #     cloud = cloud.float().to(args.device)
+        #     depth = depth.float().to(args.device)
+        #     label = label.float().to(args.device)
 
-            if args.model == "rgb":
-                logits = model(rgb)
-            elif args.model in ["rgbp", "rgbp_v2"]:
-                logits = model(rgb, cloud)
-            elif args.model == "rgbd":
-                logits = model(rgb, depth)
-            elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
-                logits = model(rgb, depth, cloud)   
+        #     if args.model == "rgb":
+        #         logits = model(rgb)
+        #     elif args.model == "pointcloud":
+        #         logits = model(cloud)  
+        #     elif args.model == "depth":
+        #         logits = model(depth)   
+        #     elif args.model in ["rgbp_v1", "rgbp_v2"]:
+        #         logits = model(rgb, cloud)
+        #     elif args.model in ["rgbd_v1", "rgbd_v2"]:
+        #         logits = model(rgb, depth)
+        #     elif args.model in ["rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
+        #         logits = model(rgb, depth, cloud)   
                 
-            logits = logits[:,0]
-            loss = loss_fn(logits, label.float())
+        #     logits = logits[:,0]
+        #     loss = loss_fn(logits, label.float())
             
-            probs = sigmoid(logits)
-            dark_loss.append(loss.item())
-            dark_probs += probs.cpu().detach().tolist()
-            dark_labels += label.cpu().detach().tolist()        
-            dark_bar.set_description("[Dark] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
-                                                        round(loss.item(),5),round(np.array(dark_loss).mean(),5)
-                                                                ))
+        #     probs = sigmoid(logits)
+        #     dark_loss.append(loss.item())
+        #     dark_probs += probs.cpu().detach().tolist()
+        #     dark_labels += label.cpu().detach().tolist()        
+        #     dark_bar.set_description("[Dark] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
+        #                                                 round(loss.item(),5),round(np.array(dark_loss).mean(),5)
+        #                                                         ))
                 
-        dark_check['test_loss'].append(np.array(dark_loss).mean())
-        dark_check['test_f1'].append(f1_score(np.array(dark_labels), np.round(dark_probs), average='macro'))
-        dark_check['test_acc'].append(accuracy_score(np.array(dark_labels), np.round(dark_probs)))          
+        # dark_check['test_loss'].append(np.array(dark_loss).mean())
+        # dark_check['test_f1'].append(f1_score(np.array(dark_labels), np.round(dark_probs), average='macro'))
+        # dark_check['test_acc'].append(accuracy_score(np.array(dark_labels), np.round(dark_probs)))          
             
-        logger.Print("[Dark] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
-                                                        round(loss.item(),5),round(np.array(test_loss).mean(),5)))
+        # logger.Print("[Dark] Epoch[{}/{}][{}/{}] Loss:{} Loss(mean):{}".format(epoch,epochs-1,step+1,len(test_loader),
+        #                                                 round(loss.item(),5),round(np.array(test_loss).mean(),5)))
         
-        test_loss_mean = round(np.array(test_loss).mean(),10)
-        outdoor_loss_mean = round(np.array(outdoor_loss).mean(),10)
-        dark_loss_mean = round(np.array(dark_loss).mean(),10)
+        # test_loss_mean = round(np.array(test_loss).mean(),10)
+        # outdoor_loss_mean = round(np.array(outdoor_loss).mean(),10)
+        # dark_loss_mean = round(np.array(dark_loss).mean(),10)
         
-        total_test_loss.append(test_loss_mean)
-        total_outdoor_loss.append(outdoor_loss_mean)
-        total_dark_loss.append(dark_loss_mean)
+        # total_test_loss.append(test_loss_mean)
+        # total_outdoor_loss.append(outdoor_loss_mean)
+        # total_dark_loss.append(dark_loss_mean)
 
-        test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
-        test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
-        outdoor_acc = accuracy_score(np.array(outdoor_labels), np.round(outdoor_probs))
-        outdoor_f1 = f1_score(np.array(outdoor_labels), np.round(outdoor_probs), average='macro')
-        dark_acc = accuracy_score(np.array(dark_labels), np.round(dark_probs))
-        dark_f1 = f1_score(np.array(dark_labels), np.round(dark_probs), average='macro')        
+        # test_acc = accuracy_score(np.array(test_labels), np.round(test_probs))
+        # test_f1 = f1_score(np.array(test_labels), np.round(test_probs), average='macro')
+        # outdoor_acc = accuracy_score(np.array(outdoor_labels), np.round(outdoor_probs))
+        # outdoor_f1 = f1_score(np.array(outdoor_labels), np.round(outdoor_probs), average='macro')
+        # dark_acc = accuracy_score(np.array(dark_labels), np.round(dark_probs))
+        # dark_f1 = f1_score(np.array(dark_labels), np.round(dark_probs), average='macro')        
                 
-        writer.add_scalar("(Test) Loss ", test_loss_mean, epoch)
-        writer.add_scalar("(Test) Accuracy ", test_acc, epoch)
-        writer.add_scalar("(Test) F1 Score ", test_f1, epoch)
-        writer.add_scalar("(Outdoor) Loss ", outdoor_loss_mean, epoch)
-        writer.add_scalar("(Outdoor) Accuracy ", outdoor_acc, epoch)
-        writer.add_scalar("(Outdoor) F1 Score ", outdoor_f1, epoch)
-        writer.add_scalar("(Dark) Loss ", dark_loss_mean, epoch)
-        writer.add_scalar("(Dark) Accuracy ", dark_acc, epoch)
-        writer.add_scalar("(Dark) F1 Score ", dark_f1, epoch)       
+        # writer.add_scalar("(Test) Loss ", test_loss_mean, epoch)
+        # writer.add_scalar("(Test) Accuracy ", test_acc, epoch)
+        # writer.add_scalar("(Test) F1 Score ", test_f1, epoch)
+        # writer.add_scalar("(Outdoor) Loss ", outdoor_loss_mean, epoch)
+        # writer.add_scalar("(Outdoor) Accuracy ", outdoor_acc, epoch)
+        # writer.add_scalar("(Outdoor) F1 Score ", outdoor_f1, epoch)
+        # writer.add_scalar("(Dark) Loss ", dark_loss_mean, epoch)
+        # writer.add_scalar("(Dark) Accuracy ", dark_acc, epoch)
+        # writer.add_scalar("(Dark) F1 Score ", dark_f1, epoch)       
         
-        logger.Print(f'Test Accuracy : {test_acc:.4f}')
-        logger.Print(f'Test F1-score : {test_f1:.4f}')
+        # logger.Print(f'Test Accuracy : {test_acc:.4f}')
+        # logger.Print(f'Test F1-score : {test_f1:.4f}')
         
-        test_performs['ACC'].append(test_acc)
-        test_performs['F1'].append(test_f1)
-        outdoor_performs['ACC'].append(outdoor_acc)
-        outdoor_performs['F1'].append(outdoor_f1)
-        dark_performs['ACC'].append(dark_acc)
-        dark_performs['F1'].append(dark_f1)
-        # logger.Print(f'  > Counter(test_labels) : {Counter(test_labels)}')
-        # logger.Print(f'  > Counter(test_probs) : {Counter(np.round(test_probs))}')
-        test_cf = confusion_matrix(np.array(test_labels), np.round(test_probs))
-        test_cf = pd.DataFrame(test_cf)
-        test_cf.columns = ['Predicted:0','Predicted:1']
-        test_cf.index = ['Label:0','Label:1']    
-        logger.Print(' --- [Test] Confustion_Matrix & Classification_Report --- ')
-        # display(test_cf)
-        logger.Print(test_cf.to_string())
-        test_performs['Info'].append(test_cf.to_string())
-        test_report = classification_report(np.array(test_labels), np.round(test_probs))
-        logger.Print(test_report)   
+        # test_performs['ACC'].append(test_acc)
+        # test_performs['F1'].append(test_f1)
+        # outdoor_performs['ACC'].append(outdoor_acc)
+        # outdoor_performs['F1'].append(outdoor_f1)
+        # dark_performs['ACC'].append(dark_acc)
+        # dark_performs['F1'].append(dark_f1)
+        
+        # # test_cf = confusion_matrix(np.array(test_labels), np.round(test_probs))
+        # # test_cf = pd.DataFrame(test_cf)
+        # # test_cf.columns = ['Predicted:0','Predicted:1']
+        # # test_cf.index = ['Label:0','Label:1']    
+        # # logger.Print(' --- [Test] Confustion_Matrix & Classification_Report --- ')
+        # # # display(test_cf)
+        # # logger.Print(test_cf.to_string())
+        # # test_performs['Info'].append(test_cf.to_string())
+        # # test_report = classification_report(np.array(test_labels), np.round(test_probs))
+        # # logger.Print(test_report)   
 
-        # 모두 다 저장 
-        logger.Print(' @@ New Save Situation !! @@ ')  
-        logger.Print(f' @@ New Current Epoch : {epoch}')    
-        logger.Print(f' ')
-        logger.Print(f' @@ New Train Accuracy : {train_acc:.4f}')
-        logger.Print(f' @@ New Train F1-Score : {train_f1:.4f}')
-        logger.Print(f' ')
-        logger.Print(f' @@ New Test Accuracy : {test_acc:.4f}')
-        logger.Print(f' @@ New Test F1-Score : {test_f1:.4f}')
-        logger.Print(f' ')
-        logger.Print(f' @@ New Outdoor Accuracy : {outdoor_acc:.4f}')
-        logger.Print(f' @@ New Outdoor F1-Score : {outdoor_f1:.4f}')
-        logger.Print(f' ')
-        logger.Print(f' @@ New Dark Accuracy : {dark_acc:.4f}')
-        logger.Print(f' @@ New Dark F1-Score : {dark_f1:.4f}')
-        logger.Print(f' ')
-        logger.Print(f' @@ New Train Loss : {train_loss_mean:}') 
-        logger.Print(f' @@ New Test Loss : {test_loss_mean}') 
-        logger.Print(f' @@ New Outdoor Loss : {outdoor_loss_mean}')
-        logger.Print(f' @@ New Dark Loss : {dark_loss_mean}')
-        logger.Print(f' ')
+        # # 모두 다 저장 
+        # logger.Print(' @@ New Save Situation !! @@ ')  
+        # logger.Print(f' @@ New Current Epoch : {epoch}')    
+        # logger.Print(f' ')
+        # logger.Print(f' @@ New Train Accuracy : {train_acc:.4f}')
+        # logger.Print(f' @@ New Train F1-Score : {train_f1:.4f}')
+        # logger.Print(f' ')
+        # logger.Print(f' @@ New Test Accuracy : {test_acc:.4f}')
+        # logger.Print(f' @@ New Test F1-Score : {test_f1:.4f}')
+        # logger.Print(f' ')
+        # logger.Print(f' @@ New Outdoor Accuracy : {outdoor_acc:.4f}')
+        # logger.Print(f' @@ New Outdoor F1-Score : {outdoor_f1:.4f}')
+        # logger.Print(f' ')
+        # logger.Print(f' @@ New Dark Accuracy : {dark_acc:.4f}')
+        # logger.Print(f' @@ New Dark F1-Score : {dark_f1:.4f}')
+        # logger.Print(f' ')
+        # logger.Print(f' @@ New Train Loss : {train_loss_mean:}') 
+        # logger.Print(f' @@ New Test Loss : {test_loss_mean}') 
+        # logger.Print(f' @@ New Outdoor Loss : {outdoor_loss_mean}')
+        # logger.Print(f' @@ New Dark Loss : {dark_loss_mean}')
+        # logger.Print(f' ')
+
+        # Comment End 
+          
         logger.Print(f'Saving Model ..... ')
- 
-        model_save(model,epoch,optimizer,np.array(train_loss).mean(),np.array(test_loss).mean(),
-                train_f1,test_f1,
-                osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))            
+        
+        model_save(model,epoch,optimizer,np.array(train_loss).mean(), 0,
+                train_f1, 0, osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))                             
+        # model_save(model,epoch,optimizer,np.array(train_loss).mean(),np.array(test_loss).mean(),
+        #         train_f1,test_f1, osp.join(args.model_path, f"epoch_{epoch}_model"+'.pth'))    
+
                 
-    # draw_train_and_test_loss(args, total_train_loss, total_test_loss)
-    # draw_accuracy_and_f1_during_training(args, test_performs["ACC"], test_performs["F1"])
-    # draw_train_and_test_loss1(args, total_train_loss, total_test_loss, total_outdoor_loss, total_dark_loss)
-    # draw_accuracy_and_f1_during_training1(args, train_performs["ACC"], train_performs["F1"], test_performs["ACC"], test_performs["F1"]
-    #                                       ,outdoor_performs["ACC"], outdoor_performs["F1"], dark_performs["ACC"], dark_performs["F1"])
-    
     logger.Print(' @@ THE END @@ ')
     logger.Print(f'  > Train Best Accuracy : {np.array(indoor_check["train_acc"]).max()}')
     logger.Print(f'  > Train Best F1-Score : {np.array(indoor_check["train_f1"]).max()}') 
-    logger.Print(f'  > Test Best Accuracy : {np.array(indoor_check["test_acc"]).max()}')
-    logger.Print(f'  > Test Best F1-Score : {np.array(indoor_check["test_f1"]).max()}')
-    logger.Print(f'  > Outdoor Best Accuracy : {np.array(outdoor_check["test_acc"]).max()}')
-    logger.Print(f'  > Outdoor Best F1-Score : {np.array(outdoor_check["test_f1"]).max()}')    
-    logger.Print(f'  > Dark Best Accuracy : {np.array(dark_check["test_acc"]).max()}')
-    logger.Print(f'  > Dark Best F1-Score : {np.array(dark_check["test_f1"]).max()}')
+    # logger.Print(f'  > Test Best Accuracy : {np.array(indoor_check["test_acc"]).max()}')
+    # logger.Print(f'  > Test Best F1-Score : {np.array(indoor_check["test_f1"]).max()}')
+    # logger.Print(f'  > Outdoor Best Accuracy : {np.array(outdoor_check["test_acc"]).max()}')
+    # logger.Print(f'  > Outdoor Best F1-Score : {np.array(outdoor_check["test_f1"]).max()}')    
+    # logger.Print(f'  > Dark Best Accuracy : {np.array(dark_check["test_acc"]).max()}')
+    # logger.Print(f'  > Dark Best F1-Score : {np.array(dark_check["test_f1"]).max()}')
     logger.Print(f'')
     
     indoor_check_file = f"{args.save_path}/{args.message}_indoor.pkl"
@@ -467,10 +446,10 @@ if __name__ == "__main__":
     parser.add_argument('--message', default='', type=str, help='parameter file name')                     
     parser.add_argument('--seed', default=1, type=int, help='Seed for random number generator')
     parser.add_argument('--cuda', default=0, type=int, help='gpu number')                                         
-    parser.add_argument('--device', default='', type=str, help='device when cuda is available')                       
+    parser.add_argument('--device', default='cuda', type=str, help='device when cuda is available')                       
     args = parser.parse_args()
     
-    if args.model not in ["rgb", "rgbd", "rgbp", "rgbp_v2","rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
+    if args.model not in ["rgb", "pointcloud", "depth", "rgbd_v1", "rgbd_v2", "rgbp_v1", "rgbp_v2", "rgbdp_v1", "rgbdp_v2", "rgbdp_v3"]:
         print("You need to checkout option 'model' [rgb, rgbd, rgbp, rgbpc]")
         sys.exit(0)
         
@@ -493,21 +472,15 @@ if __name__ == "__main__":
     # models = ["rgb", "rgbp", "rgbd", "rgbdp"]
     # attacks = {"p":"paper", "r":"replay", "m":"mask", "rpm":"total"}
     
-    # for model in models:
-    #     for key, attack in attacks.items():
-    #         if model == args.model and key == args.attacktype:
-    #             args.init_path = osp.join(f'/mnt/nas3/yrkim/liveness_lidar_project/GC_project/bc_output/checkpoint/{model}_init_{attack}_attack_server6', f"{model}_init_{attack}_attack_server6.pth")
-    #             logger.Print(f"Init parameter is from \"{args.init_path}\" ")
-
     # cuda 관련 코드
-    use_cuda = True if torch.cuda.is_available() else False
-    if use_cuda : 
-        if args.cuda == 0:
-            args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        elif args.cuda == 1:
-            args.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
-        print('device :', args.device)
-    
+    # use_cuda = True if torch.cuda.is_available() else False
+    # if use_cuda : 
+    #     if args.cuda == 0:
+    #         args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    #     elif args.cuda == 1:
+    #         args.device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    #     print('device :', args.device)
+
     # random 요소 없애기 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
