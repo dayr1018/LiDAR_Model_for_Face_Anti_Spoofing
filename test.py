@@ -56,8 +56,6 @@ def test(args, dataloader):
         ckpt = torch.load(model_path)
         model=""
         if args.model == "rgb":
-            # model, _ = Face_Detection_Model(3).to(args.device) 
-            # model = rgb_model(device=args.device)     
             model = Face_Detection_Model(3).to(args.device) 
         elif args.model == "pointcloud":
             model = pointcloud_model(device=args.device)   
@@ -218,7 +216,6 @@ if __name__ == "__main__":
     parser.add_argument('--attacktype', default='prm', type=str, help='Kinds of Presentation Attacks: r, p, m, prm')
     parser.add_argument('--model', default='', type=str, help='rgb, rgbd, rgbp, rgbdp')   
     parser.add_argument('--inputchannel', default=3, type=int, help='inputchannel')
-    # parser.add_argument('--crop', default=False, type=booltype, help='use crop (default: False)')
     parser.add_argument('--save-path', default='../bc_output/logs/', type=str, help='train logs path')
     parser.add_argument('--modelpath', default='', type=str, help='model parameter path')
     parser.add_argument('--message', default='', type=str, help='parameter file name')                     

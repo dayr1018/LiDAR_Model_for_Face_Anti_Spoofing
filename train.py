@@ -27,6 +27,7 @@ from torch.utils.data import DataLoader
 from torchsummary import summary
 
 from models.Network import Face_Detection_Model, pointcloud_model, depth_model, rgbp_v1_twostep_model, rgbp_v2_twostep_model, rgbd_v1_twostep_model, rgbd_v2_twostep_model, rgbdp_v1_twostep_model, rgbdp_v2_twostep_model, rgbdp_v3_twostep_model
+# models 
 from dataloader.dataloader import load_dataset, load_test_dataset
 from utility import draw_train_and_test_loss, draw_train_and_test_loss1, draw_accuracy_and_f1_during_training, draw_accuracy_and_f1_during_training1
 from loger import Logger
@@ -87,6 +88,8 @@ def train(args, train_loader, test_loader, outdoor_loader, dark_loader):
         model = rgbdp_v2_twostep_model(device=args.device)
     elif args.model == "rgbdp_v3":
         model = rgbdp_v3_twostep_model(device=args.device)
+    elif args.model == "mobilenet_v3":
+        model = mobile(device=args.device)
     # summary(model)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -467,11 +470,8 @@ if __name__ == "__main__":
     args.model_path = f'/mnt/nas4/yrkim/liveness_lidar_project/GC_project/bc_output/checkpoint/{args.message}'
     if not os.path.exists(args.model_path): 
         os.makedirs(args.model_path)
-
-    # # model init parameter path
-    # models = ["rgb", "rgbp", "rgbd", "rgbdp"]
-    # attacks = {"p":"paper", "r":"replay", "m":"mask", "rpm":"total"}
-    
+        
+    # (pointcloud, depth, rgbp_v1, rgbp_v2) uses this.
     # cuda 관련 코드
     # use_cuda = True if torch.cuda.is_available() else False
     # if use_cuda : 
@@ -501,18 +501,6 @@ if __name__ == "__main__":
     train_dataset, test_dataset = load_dataset(args)
     outdoor_testset = load_test_dataset(args, "2. Outdoor")
     indoor_dark_testset = load_test_dataset(args, "3. Indoor_dark")
-
-    # Autoencoder's path
-    # RGB, Depth
-    # args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_Both_3_dr01_gr0/epoch_90_model.pth"
-    # RGB 
-    # args.ae_path = "/mnt/nas3/yrkim/liveness_lidar_project/GC_project/ad_output/checkpoint/0421_RGB_3_dr0_gr001/epoch_10_model.pth"
-    # Pretrained 된 AutoEncoder 생성 (layer3)
-    # global autoencoder
-    # autoencoder = AutoEncoder_RGB(3, False, 0.1).to(args.device)
-    # ### autoencoder = AutoEncoder_Intergrated_Basic(3, False, 0.1).to(args.device)
-    # autoencoder.load_state_dict(torch.load(args.ae_path))
-    # autoencoder.eval()
 
     train_loader = DataLoader(train_dataset, batch_size=args.batchsize, shuffle=False, num_workers=args.workers, pin_memory=True, worker_init_fn=seed_worker, generator=g)
     test_loader = DataLoader(test_dataset, batch_size=args.batchsize, shuffle=False, num_workers=args.workers, pin_memory=True, worker_init_fn=seed_worker, generator=g)

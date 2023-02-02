@@ -1,8 +1,6 @@
 from re import X
 import torch
 import torch.nn as nn
-from torchsummary import summary
-
 
 ### Ablation Study - Point Cloud 만 실험    
 class pointcloud_model(nn.Module):
@@ -123,6 +121,10 @@ class rgbdp_v2_twostep_model(nn.Module):
         cloud_depth_feature = self.pt_and_depth_model(torch.concat([cloud,depth],axis=1))
         
         features = torch.concat([rgb_feature,cloud_depth_feature],axis=1)
+        print(f"rgb feature: {rgb_feature.shape}")
+        print(f"pt+depth feature: {cloud_depth_feature.shape}")
+        print(f"fusion feature: {features.shape}")
+
         logit = self.fc(features)
         # return features
         return logit   
@@ -133,13 +135,25 @@ class rgbdp_v3_twostep_model(nn.Module):
     def __init__(self,device):
         super().__init__()
         # Model 생성 및 아키텍쳐 출력   
-        self.rgb_cloud_depth_model = Face_Detection_Model(7,get_features=True).to(device)       
-        self.fc = nn.Linear(512,1).to(device)
+#         # original
+#         self.rgb_cloud_depth_model = Face_Detection_Model(7,get_features=True).to(device)       
+#         self.fc = nn.Linear(512,1).to(device)
+        
+        # Revision
+        self.rgb_cloud_depth_model = Face_Detection_Model(7,get_features=False).to(device)       
+        
         
     def forward(self,rgb,depth,cloud):
-        feature = self.rgb_cloud_depth_model(torch.concat([rgb,cloud,depth],axis=1))
-        logit = self.fc(feature)
-        # return feature
+#         # original
+#         feature = self.rgb_cloud_depth_model(torch.concat([rgb,cloud,depth],axis=1))
+#         logit = self.fc(feature)
+#         # return feature
+
+        print(f"early fusion feature: {torch.concat([rgb,cloud,depth],axis=1).shape}")
+        logit = self.rgb_cloud_depth_model(torch.concat([rgb,cloud,depth],axis=1))
+
+
+
         return logit 
         
         
