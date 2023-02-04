@@ -25,7 +25,7 @@ The architecture of CloudNet is a binary classifier based on Resnet34. The struc
 ### Evaluation Metrics
 The bonafide presentation classification error rate (**BPCER**), attack presentation classification error rate (**APCER**), and average classification error rate (**ACER**) were used as the evaluation metrics. These metrics were proposed in *ISO/IEC 30107-3:2017* for performance assessment of presentation attack detection mechanisms. BPCER is the proportion of bonafides incorrectly rejected as an attack. APCER is the percentage of attacks incorrectly accepted as bonafides. ACER is the average of BPCER and APCER. Additionally, a receiver operating characteristic (**ROC**) curve was also used in the paper(URL not yet).
 
-### Protocols
+### Evaluation Protocols
 The goal of this study was to develop a generalized FAS model considering light variations. Three protocols were designed for this purpose. Protocol 1 corresponds to when the learning and test datasets are in the same light conditions. By contrast, protocols 2 and 3 used different light conditions. The indoor, outdoor, and indoor (dark) sets were tested while training only the indoor sets. Details of each protocol are listed in the paper(URL not yet).
 
 ### Discussion & Conclusion  
