@@ -1,6 +1,6 @@
 # LiDAR-based Face Anti-Spoofing
 
-Welcome to the Repository for LiDAR-based Face Anti-Spoofing Model. This repository is for experimenting with the **'CloudNet: A LiDAR-based Face Anti-Spoofing model that is robust against light variation'** paper published in *IEEE Access(URL not yet)*.
+Welcome to the Repository for LiDAR-based Face Anti-Spoofing Model. This repository is for experimenting with the **'CloudNet: A LiDAR-based Face Anti-Spoofing model that is robust against light variation'** paper published in ***IEEE Access(URL not yet)***.
 
 [Samples from Our Own Built Dataset]
 ![Fig2_LDFAS](https://user-images.githubusercontent.com/14557402/216536362-b3c4895d-310b-4d34-9302-3ac6b170a226.JPG)
