@@ -28,7 +28,7 @@ The goal of this study was to develop a generalized FAS model considering light 
 ### Evaluation Metrics
 The bonafide presentation classification error rate (**BPCER**), attack presentation classification error rate (**APCER**), and average classification error rate (**ACER**) were used as the evaluation metrics. These metrics were proposed in *ISO/IEC 30107-3:2017* for performance assessment of presentation attack detection mechanisms. BPCER is the proportion of bonafides incorrectly rejected as an attack. APCER is the percentage of attacks incorrectly accepted as bonafides. ACER is the average of BPCER and APCER. Additionally, a receiver operating characteristic (**ROC**) curve was also used in the paper(URL not yet).
 
-### Disccusion & Conclusion  
+### Discussion & Conclusion  
 Experimental results indicate that for protocols 2 and 3, CloudNet error rates increase by 0.1340 and 0.1528, whereas the error rates of the RGB model increase by 0.3951 and 0.4111, respectively, as compared with protocol 1. These results demonstrate that the LiDAR-based FAS model with CloudNet has a more generalized performance compared with the RGB model. You can find more details in the paper(URL not yet). 
 
 # Quick Start
@@ -42,6 +42,16 @@ Experimental results indicate that for protocols 2 and 3, CloudNet error rates i
 * opencv-python : 4.5.4
 
 ### Command 
+
+#### Install Pytorch
+~~~
+pip3 install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu113
+~~~
+
+#### Install Packages
+~~~
+pip install -r requirements.txt
+~~~
 
 #### Train
 
