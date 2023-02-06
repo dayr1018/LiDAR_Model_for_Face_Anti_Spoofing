@@ -13,11 +13,12 @@ Welcome to the Repository for LiDAR-based Face Anti-Spoofing Model. This reposit
 
 We devised a multi-modal FAS model using a LiDAR sensor, which is generalized for the light domain. All you need to do is install the LiDAR camera app on your iPad Pro, and then capture the face of the target. This model has strong identification ability **even if the light domain of the test set is different from the training dataset**. This model distinguishes print attacks, replay attacks, and 3D mask attacks as spoofing.
 
+* How to install the LiDAR camera app: [Download the code from this Git repository](https://github.com/kyoungmingo/ARKit_extract_PT). Then, open the code in XCode and run it to complete the installation process.
 
 # Architecture of CloudNet
 ![Fig3_Architecture](https://user-images.githubusercontent.com/14557402/216536648-622a5cf2-ac7e-455e-a434-307a88ce8870.JPG)
 
-The architecture of CloudNet is a binary classifier based on Resnet34. The structure is composed of a RGB space and LiDAR space networks. Each network extracts facial features from the RGB and LiDAR data (point cloud and depth). CloudNet performs both early fusion and late fusion to classify bonafide and spoofing images. Herein, binary cross-entropy was used as the loss function. 
+The CloudNet is a binary classifier based on Resnet34. The structure is composed of a RGB space and LiDAR space networks. Each network extracts facial features from the RGB and LiDAR data (point cloud and depth). The CloudNet performs both early fusion and late fusion to classify bonafide and spoofing images. Herein, binary cross-entropy was used as the loss function. 
 
 # Experimental results
 ![image](https://user-images.githubusercontent.com/14557402/216754585-7aea855c-1a2f-4cad-8218-953586e51e2e.png)
