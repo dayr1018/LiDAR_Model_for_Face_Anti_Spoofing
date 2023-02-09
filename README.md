@@ -19,7 +19,7 @@ We devised a multi-modal FAS model using a LiDAR sensor, which is generalized fo
 
 The CloudNet is a binary classifier based on Resnet34. The structure is composed of a RGB space and LiDAR space networks. Each network extracts facial features from the RGB and LiDAR data (point cloud and depth). The CloudNet performs both early fusion and late fusion to classify bonafide and spoofing images. Herein, binary cross-entropy was used as the loss function. 
 
-# Experimental results
+# Experimental Results
 ![image](https://user-images.githubusercontent.com/14557402/216754585-7aea855c-1a2f-4cad-8218-953586e51e2e.png)
 
 ### Evaluation Metrics
