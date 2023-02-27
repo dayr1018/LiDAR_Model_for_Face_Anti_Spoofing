@@ -28,6 +28,9 @@ The bonafide presentation classification error rate (**BPCER**), attack presenta
 ### Evaluation Protocols
 The goal of this study was to develop a generalized FAS model considering light variations. Three protocols were designed for this purpose. Protocol 1 corresponds to when the learning and test datasets are in the same light conditions. By contrast, protocols 2 and 3 used different light conditions. The indoor, outdoor, and indoor (dark) sets were tested while training only the indoor sets. Details of each protocol are listed in the paper. [[Paper Link]](https://ieeexplore.ieee.org/document/10038600) 
 
+### Ablation Study (T-SNE) 
+![Fig6_TSNE](https://user-images.githubusercontent.com/14557402/221486067-fce208ea-bcc0-4c2a-8ff6-545ef5f6346c.JPG)
+
 ### Discussion & Conclusion  
 Experimental results indicate that for protocols 2 and 3, CloudNet error rates increase by 0.1340 and 0.1528, whereas the error rates of the RGB model increase by 0.3951 and 0.4111, respectively, as compared with protocol 1. These results demonstrate that the LiDAR-based FAS model with CloudNet has a more generalized performance compared with the RGB model. You can find more details in the paper. [[Paper Link]](https://ieeexplore.ieee.org/document/10038600) 
 
